@@ -1,0 +1,9 @@
+GNU ARM v12.2.1 - Default/
+GNU ARM v*/
+cmake_gcc/
+# Build outputs
+*.axf
+*.out
+*.map
+*.o
+*.d

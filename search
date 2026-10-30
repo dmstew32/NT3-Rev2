@@ -1,0 +1,17 @@
+Searching for: gpioPortD
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+Light\hal\hal_leds.c:10:#define RED_LED_PORT  gpioPortD
+Light\hal\hal_leds.c:13:#define GREEN_LED_PORT  gpioPortD
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+simplicity_sdk_2025.6.0\platform\driver\gpio\inc\sl_gpio.h:47:#define     gpioPortD  3
+simplicity_sdk_2025.6.0\platform\emlib\inc\em_gpio.h:67:#ifdef gpioPortD
+simplicity_sdk_2025.6.0\platform\emlib\inc\em_gpio.h:68:#undef gpioPortD
+simplicity_sdk_2025.6.0\platform\emlib\inc\em_gpio.h:533:  gpioPortD = 3,
+simplicity_sdk_2025.6.0\platform\emlib\inc\em_gpio.h:577:#define SL_GPIO_PORT_D gpioPortD
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:
+  C:\Users\jeff\SimplicityStudio\v5_workspace\NT-3-Light:

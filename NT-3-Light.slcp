@@ -1,0 +1,140 @@
+# Silicon Labs Project Configuration Tools: slcp, v0, Component selection file.
+project_name: NT-3-Light
+label: NT-3-Light
+author: Silicon Laboratories, Inc.
+description: This is a Zigbee 3.0 light application using NVM3 as the persistent storage.
+category: Zigbee Application
+filter:
+- name: Device Type
+  value: [SoC]
+- name: Project Difficulty
+  value: [Beginner]
+- name: Wireless Technology
+  value: [Zigbee]
+package: zigbee
+quality: production
+readme:
+- {path: readme.md}
+- {path: readme.md}
+source:
+- {path: main.c}
+- {path: app.c}
+tag: [prebuilt_demo]
+sdk: {id: simplicity_sdk, version: 2025.6.0}
+toolchain_settings: []
+component:
+- {id: EFR32MG21A020F1024IM32}
+- instance: [example]
+  id: cli
+- {id: clock_manager}
+- {id: hal_letimer}
+- {id: hal_timer}
+- {id: hal_usart}
+- {id: hal_wdog}
+- {id: hfxo_manager}
+- instance: [I2C]
+  id: i2cspm
+- {id: iostream_recommended_console}
+- instance: [UART]
+  id: iostream_usart
+- {id: power_manager_no_deepsleep}
+- instance: [pwm]
+  id: pwm
+- {id: sl_main}
+- {id: toolchain_gcc_lto}
+- {id: zigbee_application_bootloader}
+- {id: zigbee_basic}
+- {id: zigbee_core_cli}
+- {id: zigbee_counters}
+- {id: zigbee_debug_basic}
+- {id: zigbee_debug_print}
+- {id: zigbee_diagnostic_server}
+- {id: zigbee_dynamic_commissioning}
+- {id: zigbee_find_and_bind_initiator}
+- {id: zigbee_find_and_bind_target}
+- {id: zigbee_fragmentation}
+- {id: zigbee_groups_client}
+- {id: zigbee_groups_server}
+- {id: zigbee_identify}
+- {id: zigbee_interpan}
+- {id: zigbee_level_control}
+- {id: zigbee_network_creator}
+- {id: zigbee_network_creator_security}
+- {id: zigbee_network_steering}
+- {id: zigbee_on_off}
+- {id: zigbee_ota_bootload}
+- {id: zigbee_ota_client}
+- {id: zigbee_ota_client_policy}
+- {id: zigbee_ota_storage_simple}
+- {id: zigbee_ota_storage_simple_eeprom}
+- {id: zigbee_pro_stack}
+- {id: zigbee_reporting}
+- {id: zigbee_scan_dispatch}
+- {id: zigbee_scenes}
+- {id: zigbee_scenes_client}
+- {id: zigbee_security_manager_dlk_ecc}
+- {id: zigbee_update_tc_link_key}
+- {id: zigbee_zcl_cli}
+- {id: zigbee_zcl_framework_core}
+config_file:
+- {path: config/zcl/zcl_config.zap, directory: zcl}
+configuration:
+- {name: SL_BOARD_ENABLE_VCOM, value: '1'}
+- condition: [iostream_usart]
+  name: SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE
+  value: usartHwFlowControlCtsAndRts
+- condition: [iostream_eusart]
+  name: SL_IOSTREAM_EUSART_VCOM_FLOW_CONTROL_TYPE
+  value: SL_IOSTREAM_EUSART_UART_FLOW_CTRL_CTS_RTS
+- {name: SL_CLI_MAX_INPUT_ARGUMENTS, value: '16'}
+- {name: SLI_ZIGBEE_PRIMARY_NETWORK_DEVICE_TYPE, value: SLI_ZIGBEE_NETWORK_DEVICE_TYPE_ROUTER}
+- {name: SLI_ZIGBEE_PRIMARY_NETWORK_SECURITY_TYPE, value: SLI_ZIGBEE_NETWORK_SECURITY_TYPE_3_0}
+- {name: SL_CLI_PROMPT_STRING, value: '"zigbee_z3_light>"'}
+- condition: [device_series_2]
+  name: NVM3_DEFAULT_NVM_SIZE
+  value: '32768'
+- {name: SL_PSA_ITS_SUPPORT_V1_DRIVER, value: '0'}
+- {name: SL_PSA_ITS_SUPPORT_V2_DRIVER, value: '0'}
+- {name: SL_PSA_ITS_SUPPORT_V3_DRIVER, value: '1'}
+- condition: [freertos, device_series_2]
+  name: SL_STACK_SIZE
+  value: '1024'
+- condition: [device_series_3]
+  name: SL_STACK_SIZE
+  value: '16384'
+- condition: [micriumos_kernel, device_series_2]
+  name: SL_STACK_SIZE
+  value: '512'
+- {name: configTIMER_TASK_PRIORITY, value: '53'}
+- {name: configMAX_TASK_NAME_LEN, value: '30'}
+- condition: [cmsis_rtos2]
+  name: SL_CLI_EXAMPLE_TASK_STACK_SIZE
+  value: '600'
+- condition: [device_series_3]
+  name: SL_CLI_EXAMPLE_TASK_STACK_SIZE
+  value: '1500'
+- condition: [device_series_3]
+  name: SL_ZIGBEE_STACK_RTOS_TASK_STACK_SIZE
+  value: '5800'
+- condition: [device_series_3]
+  name: SL_ZIGBEE_APP_FRAMEWORK_RTOS_TASK_STACK_SIZE
+  value: '6000'
+- condition: [zigbee_high_datarate_phy, device_series_3]
+  name: SL_CLI_EXAMPLE_TASK_STACK_SIZE
+  value: '1500'
+- condition: [zigbee_high_datarate_phy, device_series_3]
+  name: SL_ZIGBEE_STACK_RTOS_TASK_STACK_SIZE
+  value: '5800'
+- condition: [zigbee_high_datarate_phy, device_series_3]
+  name: SL_ZIGBEE_APP_FRAMEWORK_RTOS_TASK_STACK_SIZE
+  value: '6000'
+- condition: [zigbee_high_datarate_phy, device_series_3]
+  name: SL_HDR_PHY_MAX_PACKET_SIZE
+  value: '2045'
+- condition: [device_series_3]
+  name: SL_ZIGBEE_AF_PLUGIN_ZCL_CLUSTER_DEFER_ATTRIBUTE_WRITES_TO_NVM_MS
+  value: '2000'
+ui_hints:
+  highlight:
+  - {path: readme.md}
+
