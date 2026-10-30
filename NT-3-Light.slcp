@@ -19,9 +19,62 @@ readme:
 source:
 - {path: main.c}
 - {path: app.c}
+- {path: Light/auto_commission/auto_comm.c}
+- {path: Light/hal/hal_buttons.c}
+- {path: Light/hal/hal_leds.c}
+- {path: Light/hal/hal_light_sensor.c}
+- {path: Light/hal/hal_occ_sensor.c}
+- {path: Light/hal/hal_pwm.c}
+- {path: Light/hal/hal_utils.c}
+- {path: Light/nwk_config/adaptiv_config.c}
+- {path: Light/nwk_config/nwk_multicast.c}
+- {path: Light/nwk_mgmt/factory_reset.c}
+- {path: Light/nwk_mgmt/nwk_commission.c}
+- {path: Light/nwk_mgmt/nwk_groups.c}
+- {path: Light/nwk_mgmt/nwk_utils.c}
+- {path: Light/nwk_on_off/light_on_off.c}
+- {path: Light/nwk_sensors/light_sensor.c}
+- {path: Light/nwk_sensors/occ_sensor.c}
+- {path: Light/tasker/RehTOS.c}
 tag: [prebuilt_demo]
-sdk: {id: simplicity_sdk, version: 2025.6.0}
-toolchain_settings: []
+sdk: {id: simplicity_sdk, version: 2025.6.3}
+include:
+- path: .
+  file_list:
+  - {path: NT_3_app.h}
+- path: Light/auto_commission
+  file_list:
+  - {path: auto_comm.h}
+- path: Light/hal
+  file_list:
+  - {path: hal_buttons.h}
+  - {path: hal_leds.h}
+  - {path: hal_light_sensor.h}
+  - {path: hal_occ_sensor.h}
+  - {path: hal_pwm.h}
+  - {path: hal_utils.h}
+- path: Light/nwk_config
+  file_list:
+  - {path: adaptiv_config.h}
+  - {path: nwk_multicast.h}
+- path: Light/nwk_mgmt
+  file_list:
+  - {path: factory_reset.h}
+  - {path: nwk_commission.h}
+  - {path: nwk_groups.h}
+  - {path: nwk_utils.h}
+- path: Light/nwk_on_off
+  file_list:
+  - {path: light_on_off.h}
+- path: Light/nwk_sensors
+  file_list:
+  - {path: light_sensor.h}
+  - {path: occ_sensor.h}
+- path: Light/tasker
+  file_list:
+  - {path: RehTOS.h}
+toolchain_settings:
+- {option: gcc_compiler_option, value: '-include NT_3_app.h'}
 component:
 - {id: EFR32MG21A020F1024IM32}
 - instance: [example]

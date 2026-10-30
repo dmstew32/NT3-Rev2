@@ -20,6 +20,7 @@
 #include "psa/crypto.h"
 #include "sl_se_manager.h"
 #include "sl_iostream_init_instances.h"
+#include "sl_token_manager_api.h"
 #include "nvm3_default.h"
 #include "sl_iostream_handles.h"
 
@@ -70,6 +71,7 @@ void sl_service_init(void)
   sl_iostream_init_instances_stage_1();
   sl_iostream_init_instances_stage_2();
   sl_cli_instances_init();
+  sl_token_manager_init();
 }
 
 void sl_stack_init(void)

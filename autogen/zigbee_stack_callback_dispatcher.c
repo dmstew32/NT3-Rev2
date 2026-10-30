@@ -763,8 +763,8 @@ void sli_zigbee_af_zll_touch_link_target(
 
 // Mac Filter Match Message
 void sli_zigbee_af_mac_filter_match_message(
-      // filter index match.
-      uint8_t filterIndexMatch,
+      // filter value match.
+      sl_zigbee_mac_filter_match_data_t filterValueMatch,
       // message type.
       sl_zigbee_mac_passthrough_type_t messageType,
       // RX packet info.
@@ -774,13 +774,15 @@ void sli_zigbee_af_mac_filter_match_message(
       // message contents.
       uint8_t *messageContents)
 {
-(void)filterIndexMatch;
+
+
+
+sli_zigbee_af_interpan_mac_filter_match_message_callback (filterValueMatch, messageType, packetInfo, messageLength, messageContents);
+(void)filterValueMatch;
 (void)messageType;
 (void)packetInfo;
 (void)messageLength;
 (void)messageContents;
-
-sli_zigbee_af_interpan_mac_filter_match_message_callback (filterIndexMatch, messageType, packetInfo, messageLength, messageContents);
 }
 
 

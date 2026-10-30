@@ -47,7 +47,6 @@ SECTIONS
 
     __Vectors_End = .;
     __Vectors_Size = __Vectors_End - __Vectors;
-    __lma_ramfuncs_start__ = .;
   } > FLASH
   .bootloader_reset_section (NOLOAD):
   {
@@ -78,14 +77,13 @@ SECTIONS
   } > RAM
 
 
-  .noinit (NOLOAD):
+  .noinit (NOLOAD) : ALIGN(4)
   {
     *(.noinit*);
-    . = ALIGN(4);
   } > RAM
 
 
-  text_application_ram :
+  text_application_ram : ALIGN(4)
   {
     . = ALIGN(4);
     __vma_ramfuncs_start__ = .;
@@ -98,10 +96,11 @@ SECTIONS
     __text_application_ram_end__ = .;
   } > RAM AT > FLASH
 
+  __lma_ramfuncs_start__ = LOADADDR(text_application_ram);
+  __lma_ramfuncs_end__ = LOADADDR(text_application_ram) + SIZEOF(text_application_ram);
+
   .rodata (READONLY):
   {
-    __lma_ramfuncs_end__ = .;
-    __rodata_start__ = .;
     __rodata_end__ = .;
   } > FLASH
 

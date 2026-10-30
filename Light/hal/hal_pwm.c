@@ -1,5 +1,8 @@
 #include <stdlib.h>
 #include "af.h"
+// SDK 2025.6.3: hal.h no longer pulls in the legacy token API, which
+// provides the TOKEN_APP_* ids and types from sl_custom_token_header.h.
+#include "sl_token_api.h"
 #include "zigbee_app_framework_event.h"
 #include "sl_pwm.h"
 #include "sl_pwm_init_pwm_config.h"

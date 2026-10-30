@@ -7,3 +7,9 @@ cmake_gcc/
 *.map
 *.o
 *.d
+# slc / makefile build artifacts (Studio regenerates these)
+build/
+*.Makefile
+*.project.mak
+config/zcl/slc_args.json
+autogen/sbom/

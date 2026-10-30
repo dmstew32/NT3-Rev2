@@ -38,6 +38,7 @@ void sli_zigbee_af_local_data_init(void);
 void sl_zigbee_af_counters_init_cb(uint8_t init_level);
 void sl_zigbee_af_fragmentation_init_cb(uint8_t init_level);
 void sl_zigbee_af_interpan_init_cb(uint8_t init_level);
+void sl_zigbee_af_scenes_init(uint8_t init_level);
 // Init done
 void sli_zigbee_af_init_done(void);
 void sli_zigbee_af_init_cb(uint8_t init_level);

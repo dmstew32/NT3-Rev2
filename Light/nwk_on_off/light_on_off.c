@@ -1,4 +1,7 @@
 #include "af.h"
+// SDK 2025.6.3: hal.h no longer pulls in the legacy token API, which
+// provides the TOKEN_APP_* ids and types from sl_custom_token_header.h.
+#include "sl_token_api.h"
 #include "light_on_off.h"
 #include "RehTOS.h"
 #include "hal_utils.h"
