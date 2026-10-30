@@ -8,7 +8,7 @@ cmake_gcc/
 *.o
 *.d
 # slc / makefile build artifacts (Studio regenerates these)
-build/
+/build/
 *.Makefile
 *.project.mak
 config/zcl/slc_args.json
