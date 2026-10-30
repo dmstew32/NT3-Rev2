@@ -36,6 +36,7 @@
   #include "zll-level-control-server.h"
 #endif
 
+#ifdef ADAPTIV_LIGHT
 
 #define ONOFF_PRINTF (0)
 
@@ -54,27 +55,51 @@ static bool _on_cmd = false;
 
 extern void suspend_all_sensors(uint16_t Dsecs);
 
+#endif // ADAPTIV_LIGHT
 #ifdef ZCL_USING_ON_OFF_CLUSTER_START_UP_ON_OFF_ATTRIBUTE
 static bool areStartUpOnOffServerAttributesTokenized(uint8_t endpoint);
 #endif
+#ifdef ADAPTIV_LIGHT
 
 extern void move_to_level_onoff(uint8_t level, uint16_t transitionTimeDs);
 
+#endif // ADAPTIV_LIGHT
 
 sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
                                                                uint8_t command,
                                                                bool initiatedByLevelChange)
 {
   sl_zigbee_af_status_t status;
+#ifdef ADAPTIV_LIGHT
   bool currentOnOffValue, newValue;
+#else  // ADAPTIV_LIGHT
+  bool currentValue, newValue;
+#endif // ADAPTIV_LIGHT
 
+#ifdef ADAPTIV_LIGHT
   // NOTE: Remove when ready
   if(LIGHT_ENDPOINT != endpoint)
   {
       sl_zigbee_af_on_off_cluster_println("ERR: af_on_off_cluster_set_value_cb ep:%d", endpoint);
       return(SL_ZIGBEE_ZCL_STATUS_FAILURE);
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_on_off_cluster_println("On/Off set value: %02X %02X", endpoint, command);
+
+  // read current on/off value
+  status = sl_zigbee_af_read_attribute(endpoint,
+                                       ZCL_ON_OFF_CLUSTER_ID,
+                                       ZCL_ON_OFF_ATTRIBUTE_ID,
+                                       CLUSTER_MASK_SERVER,
+                                       (uint8_t *)&currentValue,
+                                       sizeof(currentValue),
+                                       NULL); // data type
+  if (status != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
+    sl_zigbee_af_on_off_cluster_println("ERR: reading on/off %02X", status);
+    return status;
+#endif // ADAPTIV_LIGHT
   }
 
+#ifdef ADAPTIV_LIGHT
   #if (ONOFF_PRINTF >= 1)
   sl_zigbee_af_on_off_cluster_println("  On/Off_cb  cmd %s from level_chg %s",
           command == 0 ? "OFF" : "ON", initiatedByLevelChange ? "YES" : "NO");
@@ -83,7 +108,9 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
   // Read current on/off value
   currentOnOffValue = read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID);
 
+#endif // ADAPTIV_LIGHT
   // if the value is already what we want to set it to then do nothing
+#ifdef ADAPTIV_LIGHT
   if(((!currentOnOffValue && (command == ZCL_OFF_COMMAND_ID)) ||
      (currentOnOffValue && (command == ZCL_ON_COMMAND_ID))) &&
      !is_app_flags_nonvol_set(B_EM_MODE))
@@ -94,12 +121,24 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
      #endif
 
      return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
+#else  // ADAPTIV_LIGHT
+  if ((!currentValue && command == ZCL_OFF_COMMAND_ID)
+      || (currentValue && command == ZCL_ON_COMMAND_ID)) {
+    sl_zigbee_af_on_off_cluster_println("On/off already set to new value");
+    return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
+#endif // ADAPTIV_LIGHT
   }
 
   // We either got a toggle, or an on when off, or an off when on,
   // so we need to swap the value
+#ifdef ADAPTIV_LIGHT
   suspend_all_sensors(DSECS_2_SECS);
+#else  // ADAPTIV_LIGHT
+  newValue = !currentValue;
+  sl_zigbee_af_on_off_cluster_println("Toggle on/off from %02X to %02X", currentValue, newValue);
+#endif // ADAPTIV_LIGHT
 
+#ifdef ADAPTIV_LIGHT
   //newValue = !currentOnOffValue;
   newValue = (bool)command; // JGR EM_MODE bull shit
   #if (ONOFF_PRINTF >= 1)
@@ -108,10 +147,14 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
   #endif
 
   // The sequence of updating on/off attribute and kick off level change effect should
+#else  // ADAPTIV_LIGHT
+  // the sequence of updating on/off attribute and kick off level change effect should
+#endif // ADAPTIV_LIGHT
   // be depend on whether we are turning on or off. If we are turning on the light, we
   // should update the on/off attribute before kicking off level change, if we are
   // turning off the light, we should do the opposite,cmd_data that is kick off level change
   // before updating the on/off attribute.
+#ifdef ADAPTIV_LIGHT
   if (newValue)
   {
      // Turning ON
@@ -120,7 +163,22 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
         sl_zigbee_af_on_off_cluster_println("ERR: writing on/off %02X", status);
         return status;
      }
+#else  // ADAPTIV_LIGHT
+  if (newValue) {
+    // write the new on/off value
+    status = sl_zigbee_af_write_attribute(endpoint,
+                                          ZCL_ON_OFF_CLUSTER_ID,
+                                          ZCL_ON_OFF_ATTRIBUTE_ID,
+                                          CLUSTER_MASK_SERVER,
+                                          (uint8_t *)&newValue,
+                                          ZCL_BOOLEAN_ATTRIBUTE_TYPE);
+    if (status != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
+      sl_zigbee_af_on_off_cluster_println("ERR: writing on/off %02X", status);
+      return status;
+    }
+#endif // ADAPTIV_LIGHT
 
+#ifdef ADAPTIV_LIGHT
      // If initiatedByLevelChange is false, then we assume that the level change
      // ZCL stuff has not happened and we do it here
      if (!initiatedByLevelChange
@@ -142,7 +200,25 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
      // There's also a delay in the occ sensor code, if off by occ
      // TODO: Need this "long" time due to occ supply? bouncing on off xtion
      suspend_all_sensors(DSECS_3_SECS);
+#else  // ADAPTIV_LIGHT
+    // If initiatedByLevelChange is false, then we assume that the level change
+    // ZCL stuff has not happened and we do it here
+    if (!initiatedByLevelChange
+        && sl_zigbee_af_contains_server(endpoint, ZCL_LEVEL_CONTROL_CLUSTER_ID)) {
+      sl_zigbee_af_on_off_cluster_level_control_effect_cb(endpoint,
+                                                          newValue);
+    }
+  } else {
+    // If initiatedByLevelChange is false, then we assume that the level change
+    // ZCL stuff has not happened and we do it here
+    if (!initiatedByLevelChange
+        && sl_zigbee_af_contains_server(endpoint, ZCL_LEVEL_CONTROL_CLUSTER_ID)) {
+      sl_zigbee_af_on_off_cluster_level_control_effect_cb(endpoint,
+                                                          newValue);
+    }
+#endif // ADAPTIV_LIGHT
 
+#ifdef ADAPTIV_LIGHT
      if(!allow_light_off())
      {
         uint8_t level = DEFAULT_MIN_LIGHT_LEVEL_DT;
@@ -179,9 +255,32 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
         sl_zigbee_af_on_off_cluster_println("ERR: writing on/off %02X", status);
         return status;
      }
+#else  // ADAPTIV_LIGHT
+    // write the new on/off value
+    status = sl_zigbee_af_write_attribute(endpoint,
+                                          ZCL_ON_OFF_CLUSTER_ID,
+                                          ZCL_ON_OFF_ATTRIBUTE_ID,
+                                          CLUSTER_MASK_SERVER,
+                                          (uint8_t *)&newValue,
+                                          ZCL_BOOLEAN_ATTRIBUTE_TYPE);
+    if (status != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
+      sl_zigbee_af_on_off_cluster_println("ERR: writing on/off %02X", status);
+      return status;
+    }
+#endif // ADAPTIV_LIGHT
   }
 
+#ifdef ADAPTIV_LIGHT
   // The scene has been changed (the value of on/off has changed) so
+#else  // ADAPTIV_LIGHT
+#ifdef SL_CATALOG_ZIGBEE_ZLL_ON_OFF_SERVER_PRESENT
+  if (initiatedByLevelChange) {
+    sl_zigbee_af_zll_on_off_server_level_control_zll_extensions(endpoint);
+  }
+#endif // SL_CATALOG_ZIGBEE_ZLL_ON_OFF_SERVER_PRESENT
+
+  // the scene has been changed (the value of on/off has changed) so
+#endif // ADAPTIV_LIGHT
   // the current scene as descibed in the attribute table is invalid,
   // so mark it as invalid (just writes the valid/invalid attribute)
   if (sl_zigbee_af_contains_server(endpoint, ZCL_SCENES_CLUSTER_ID)) {
@@ -195,7 +294,11 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
 
 sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_off_cb(void)
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_status_t status = sl_zigbee_af_on_off_cluster_set_value_cb(LIGHT_ENDPOINT, // If called not ota
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_status_t status = sl_zigbee_af_on_off_cluster_set_value_cb(sl_zigbee_af_current_endpoint(),
+#endif // ADAPTIV_LIGHT
                                                                           ZCL_OFF_COMMAND_ID,
                                                                           false);
 
@@ -209,7 +312,11 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_off_cb(void)
 
 sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_on_cb(void)
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_status_t status = sl_zigbee_af_on_off_cluster_set_value_cb(LIGHT_ENDPOINT,
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_status_t status = sl_zigbee_af_on_off_cluster_set_value_cb(sl_zigbee_af_current_endpoint(),
+#endif // ADAPTIV_LIGHT
                                                                           ZCL_ON_COMMAND_ID,
                                                                           false);
 
@@ -346,6 +453,7 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
     switch (cmd->commandId) {
       case ZCL_OFF_COMMAND_ID:
       {
+#ifdef ADAPTIV_LIGHT
         _on_cmd = false;
         if(0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID))
         {
@@ -359,19 +467,23 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
         }
         _off_cmd = true;
 
+#endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_on_off_cluster_off_cb();
         break;
       }
       case ZCL_ON_COMMAND_ID:
       {
+#ifdef ADAPTIV_LIGHT
         _on_cmd = true;
         _off_cmd = false;
 
+#endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_on_off_cluster_on_cb();
         break;
       }
       case ZCL_TOGGLE_COMMAND_ID:
       {
+#ifdef ADAPTIV_LIGHT
         _off_cmd = read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID) ? true : false;
         _on_cmd = !_off_cmd;
         if(_off_cmd)
@@ -379,18 +491,22 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
             save_present_light_level_to_on_level_attribute();
         }
 
+#endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_on_off_cluster_toggle_cb();
         break;
       }
     }
+#ifdef ADAPTIV_LIGHT
 
     // On or Off, will restore occ delay if long delay
     restore_unoccupied_delay();
+#endif // ADAPTIV_LIGHT
   }
 
   return status;
 }
 
+#ifdef ADAPTIV_LIGHT
 bool off_from_switch(void)
 {
   return(_off_cmd);
@@ -407,3 +523,5 @@ void clear_on_from_switch(void)
 {
   _on_cmd = false;
 }
+
+#endif // ADAPTIV_LIGHT

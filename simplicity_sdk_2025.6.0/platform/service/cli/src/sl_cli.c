@@ -54,11 +54,13 @@
 #endif
 
 #include "sl_assert.h"
+#ifdef ADAPTIV_LIGHT
 
 #ifdef DHS_SINK_DEVICE
 #undef SL_CLI_PROMPT_STRING
 #define SL_CLI_PROMPT_STRING              "SINK> "
 #endif
+#endif // ADAPTIV_LIGHT
 
 #if defined(SL_CATALOG_CLI_STORAGE_NVM3_PRESENT)
 #include "sl_cli_storage_nvm3.h"

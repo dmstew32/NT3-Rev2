@@ -125,11 +125,17 @@ void sl_zigbee_af_green_power_client_init_cb(uint8_t init_level)
       // Write the max proxy table entries attribute, since we currently have no
       // way to configure it at compile time.
 #ifdef EZSP_HOST
+#ifdef ADAPTIV_LIGHT
       uint16_t stackProxyTableSize = 0;
       if (SL_ZIGBEE_EZSP_SUCCESS != sl_zigbee_ezsp_get_configuration_value(SL_ZIGBEE_EZSP_CONFIG_GP_PROXY_TABLE_SIZE, (uint16_t*)&stackProxyTableSize)) {
+#else  // ADAPTIV_LIGHT
+      if (SL_ZIGBEE_EZSP_SUCCESS != sl_zigbee_ezsp_get_configuration_value(SL_ZIGBEE_EZSP_CONFIG_GP_PROXY_TABLE_SIZE, (uint16_t*)&gpProxyTableSize)) {
+#endif // ADAPTIV_LIGHT
         sl_zigbee_af_green_power_cluster_println("ERR: Cannot get the proxy table size from GP stack.");
       }
+#ifdef ADAPTIV_LIGHT
       gpProxyTableSize = (uint8_t)stackProxyTableSize;
+#endif // ADAPTIV_LIGHT
 #endif //EZSP_HOST
       uint8_t proxyTableSize = SL_ZIGBEE_GP_PROXY_TABLE_SIZE;
       sl_zigbee_af_status_t UNUSED status
@@ -991,7 +997,9 @@ static bool commissioningGpdfCallback(sl_zigbee_gp_params_t *params)
   // Commissioning: Step 12a: Proxy receives commissioning command
   // If applicationId == 0b0000 and srcId == 0 or reserved range 0xfffffff9 - 0xffffffffe
   // OR applicationId == 0b0010 and srcId == 0, drop frame.
+#ifdef ADAPTIV_LIGHT
   bool frameFound = false;
+#endif // ADAPTIV_LIGHT
   if (!sli_zigbee_af_gp_make_addr(&(params->addr),
                                   params->addr.applicationId,
                                   params->addr.id.sourceId,
@@ -1018,6 +1026,9 @@ static bool commissioningGpdfCallback(sl_zigbee_gp_params_t *params)
 
   // Step c
   // RxAfterTx is true
+#ifndef ADAPTIV_LIGHT
+  bool frameFound = false;
+#endif // ADAPTIV_LIGHT
   if ((params->bidirectionalInfo & SL_ZIGBEE_GP_BIDIRECTION_INFO_RX_AFTER_TX_MASK)
       && (params->gpdCommandId == SL_ZIGBEE_ZCL_GP_GPDF_COMMISSIONING)
       && (params->addr.applicationId == SL_ZIGBEE_GP_APPLICATION_IEEE_ADDRESS)) {

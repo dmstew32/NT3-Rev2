@@ -17,13 +17,17 @@
 // automatically generated from sl_zigbee_dynamic_commissioning.h.  Do not manually edit
 #include "stack/include/sl_zigbee_dynamic_commissioning.h"
 #include "stack/internal/inc/sl_zigbee_dynamic_commissioning_internal_def.h"
+#ifdef ADAPTIV_LIGHT
 #include "sl_zigbee_debug_print.h"//JGR
+#endif // ADAPTIV_LIGHT
 
 void sli_zigbee_stack_dynamic_commissioning_alert_callback(sl_zigbee_address_info *ids,
                                                            sl_zigbee_dynamic_commissioning_event_t event)
 {
   sl_zigbee_dynamic_commissioning_alert_callback(ids,
                                                  event);
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_app_debug_println("slI_zigbee_dynamic_commissioning_alert_callback addr:0x%X event:%0x%X",
                                 ids->device_short,event );
+#endif // ADAPTIV_LIGHT
 }

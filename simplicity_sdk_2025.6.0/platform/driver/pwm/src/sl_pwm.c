@@ -127,7 +127,11 @@ sl_status_t sl_pwm_init(sl_pwm_instance_t *pwm, sl_pwm_config_t *config)
   channel_init.compare_match_output_action = SL_HAL_TIMER_CHANNEL_OUTPUT_ACTION_TOGGLE;
   channel_init.input_capture_edge = SL_HAL_TIMER_CHANNEL_EDGE_BOTH;
   channel_init.output_invert = (config->polarity == PWM_ACTIVE_LOW);
+#ifdef ADAPTIV_LIGHT
   sl_hal_timer_channel_init(pwm->timer, pwm->channel, &channel_init);x
+#else  // ADAPTIV_LIGHT
+  sl_hal_timer_channel_init(pwm->timer, pwm->channel, &channel_init);
+#endif // ADAPTIV_LIGHT
 #endif
   // Configure CC channel pinout
   volatile uint32_t * route_register;
@@ -156,7 +160,11 @@ sl_status_t sl_pwm_init(sl_pwm_instance_t *pwm, sl_pwm_config_t *config)
   }
   route_register += pwm->channel;
   *route_register = (pwm->port << _GPIO_TIMER0_CC0ROUTE_PORT_SHIFT)
+#ifdef ADAPTIV_LIGHT
                     | (pwm->pin << _GPIO_TIMER0_CC0ROUTE_PIN_SHIFT);y
+#else  // ADAPTIV_LIGHT
+                    | (pwm->pin << _GPIO_TIMER0_CC0ROUTE_PIN_SHIFT);
+#endif // ADAPTIV_LIGHT
 #endif
 
   // Configure TIMER frequency
@@ -187,7 +195,11 @@ sl_status_t sl_pwm_init(sl_pwm_instance_t *pwm, sl_pwm_config_t *config)
   // Set initial duty cycle to 0%
   sl_hal_timer_channel_set_compare(pwm->timer, pwm->channel, 0U);
 
+#ifdef ADAPTIV_LIGHT
   sl_hal_timer_start(pwm->timer);z
+#else  // ADAPTIV_LIGHT
+  sl_hal_timer_start(pwm->timer);
+#endif // ADAPTIV_LIGHT
 #endif
 
   return SL_STATUS_OK;

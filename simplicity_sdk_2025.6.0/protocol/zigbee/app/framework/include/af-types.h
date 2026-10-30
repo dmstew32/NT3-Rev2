@@ -1037,8 +1037,10 @@ typedef struct {
 #ifdef ZCL_USING_LEVEL_CONTROL_CLUSTER_SERVER
   bool hasCurrentLevelValue;
   uint8_t   currentLevelValue;
+#ifdef ADAPTIV_LIGHT
   bool hasCurrentXValue;
   uint16_t  currentXValue;
+#endif // ADAPTIV_LIGHT
 #endif
 #ifdef ZCL_USING_THERMOSTAT_CLUSTER_SERVER
   bool hasOccupiedCoolingSetpointValue;

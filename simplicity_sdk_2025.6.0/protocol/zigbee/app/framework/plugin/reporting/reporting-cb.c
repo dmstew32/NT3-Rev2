@@ -33,7 +33,9 @@
  */
 WEAK(sl_zigbee_af_status_t sl_zigbee_af_reporting_configured_cb(const sl_zigbee_af_plugin_reporting_entry_t *entry))
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_app_debug_println("cb cb");
+#endif // ADAPTIV_LIGHT
   return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
 }
 

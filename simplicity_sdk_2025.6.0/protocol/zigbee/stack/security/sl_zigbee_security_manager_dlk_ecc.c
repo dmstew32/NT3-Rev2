@@ -570,7 +570,11 @@ sl_status_t sli_zigbee_stack_sec_man_speke_expand_shared_secret(sl_zigbee_sec_ma
   // =====
   sl_zigbee_dlk_ecc_hash_ctx_t hash_ctx;
   if (dlk_ecc_ctx->config.hash_id == DLK_ECC_HASH_SHA_256) {
+#ifdef ADAPTIV_LIGHT
 
+#else  // ADAPTIV_LIGHT
+    mbedtls_sha256_init(&hash_ctx.sha);
+#endif // ADAPTIV_LIGHT
     // NOTE 0 == !is224
     mbedtls_sha256_starts(&hash_ctx.sha, 0);
   } else if (dlk_ecc_ctx->config.hash_id == DLK_ECC_HASH_AES_MMO_128) {

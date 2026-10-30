@@ -31,7 +31,9 @@
 #include "network_test_config.h"
 #endif //SL_CATALOG_ZIGBEE_NETWORK_TEST_PRESENT
 
+#ifdef ADAPTIV_LIGHT
 #include "hal_utils.h"
+#endif // ADAPTIV_LIGHT
 #ifndef ZCL_SL_WWAH_CLUSTER_ID
 #define ZCL_SL_WWAH_CLUSTER_ID 0xFC57u
 #endif
@@ -404,11 +406,17 @@ uint16_t sl_zigbee_af_get_mfg_code_from_current_command(void)
 
 static void printIncomingZclMessage(const sl_zigbee_af_cluster_command_t *cmd)
 {
+#ifdef ADAPTIV_LIGHT
   if((cmd->apsFrame->clusterId == 0x0019) && (cmd->bufLen > 16)) { return; }
 
+#endif // ADAPTIV_LIGHT
 #if ((defined(EMBER_AF_PRINT_ENABLE) && defined(SL_ZIGBEE_AF_PRINT_APP)) || (!defined(LARGE_NETWORK_TESTING) ))
   if (sl_zigbee_af_print_received_messages) {
+#ifdef ADAPTIV_LIGHT
     sl_zigbee_af_app_print("\r\nT<%d>:", get_time_ms());
+#else  // ADAPTIV_LIGHT
+    sl_zigbee_af_app_print("\r\nT%08X:", sl_zigbee_af_get_current_time());
+#endif // ADAPTIV_LIGHT
     sl_zigbee_af_app_print("RX len %d, ep %02X, clus 0x%04X ",
                            cmd->bufLen,
                            cmd->apsFrame->destinationEndpoint,
@@ -534,7 +542,11 @@ bool sl_zigbee_af_process_message(sl_zigbee_aps_frame_t *apsFrame,
                                                             curCmd.apsFrame->clusterId,
                                                             curCmd.source)
         && (!(curCmd.apsFrame->options & SL_ZIGBEE_APS_OPTION_ENCRYPTION))) {
+#ifdef ADAPTIV_LIGHT
         sl_zigbee_app_debug_println("Drop clus %04X due to no aps security",
+#else  // ADAPTIV_LIGHT
+      sl_zigbee_af_debug_println("Drop clus %04X due to no aps security",
+#endif // ADAPTIV_LIGHT
                                  curCmd.apsFrame->clusterId);
       afNoSecurityForDefaultResponse = true;
 #if defined(ZCL_USING_SL_WWAH_CLUSTER_SERVER) || defined(ZCL_USING_SL_WWAH_CLUSTER_CLIENT)
@@ -546,7 +558,11 @@ bool sl_zigbee_af_process_message(sl_zigbee_aps_frame_t *apsFrame,
       sendStatus = sl_zigbee_af_send_default_response(&curCmd, SL_ZIGBEE_ZCL_STATUS_FAILURE);
 #endif
       if (SL_STATUS_OK != sendStatus) {
+#ifdef ADAPTIV_LIGHT
           sl_zigbee_app_debug_println("Util: failed to send %s response: 0x%02X",
+#else  // ADAPTIV_LIGHT
+        sl_zigbee_af_debug_println("Util: failed to send %s response: 0x%02X",
+#endif // ADAPTIV_LIGHT
                                    "default",
                                    sendStatus);
       }
@@ -585,9 +601,13 @@ bool sl_zigbee_af_process_message(sl_zigbee_aps_frame_t *apsFrame,
       // message is actually being passed to in this iteration of the loop.
       curCmd.apsFrame->destinationEndpoint      = endpoint;
       sl_zigbee_af_response_aps_frame.sourceEndpoint = endpoint;
+#ifdef ADAPTIV_LIGHT
       sl_zigbee_af_debug_println("pre-dispatchZclMessage");
+#endif // ADAPTIV_LIGHT
       if (dispatchZclMessage(&curCmd)) {
+#ifdef ADAPTIV_LIGHT
           sl_zigbee_af_debug_println("dispatchZclMessage");
+#endif // ADAPTIV_LIGHT
         msgHandled = true;
       }
     }

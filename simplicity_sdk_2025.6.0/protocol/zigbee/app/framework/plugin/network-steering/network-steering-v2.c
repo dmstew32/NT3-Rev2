@@ -41,7 +41,9 @@
 #include "app/framework/plugin/update-tc-link-key/update-tc-link-key.h"
 #endif
 
+#ifdef ADAPTIV_LIGHT
 #include "adaptiv_config.h" // More crap
+#endif // ADAPTIV_LIGHT
 #ifdef SL_ZIGBEE_TEST
   #define HIDDEN
   #define SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_RADIO_TX_POWER 3
@@ -49,7 +51,9 @@
   #define HIDDEN static
 #endif
 
+#ifdef ADAPTIV_LIGHT
 #include "hal_utils.h"
+#endif // ADAPTIV_LIGHT
 //============================================================================
 // Globals
 
@@ -162,6 +166,7 @@ sl_zigbee_af_event_t sl_zigbee_af_network_steering_finish_steering_event[SL_ZIGB
 #define UPDATE_TC_LINK_KEY_JITTER_MIN_MS (MILLISECOND_TICKS_PER_SECOND * 10)
 #define UPDATE_TC_LINK_KEY_JITTER_MAX_MS (MILLISECOND_TICKS_PER_SECOND * 40)
 
+#ifdef ADAPTIV_LIGHT
 #ifdef TC_LINK_KEY_FIX
 sl_zigbee_af_plugin_network_steering_options_t sli_zigbee_af_network_steering_options_mask
   = SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_OPTIONS_NONE;
@@ -169,6 +174,10 @@ sl_zigbee_af_plugin_network_steering_options_t sli_zigbee_af_network_steering_op
 sl_zigbee_af_plugin_network_steering_options_t sli_zigbee_af_network_steering_options_mask
   = SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_OPTIONS_NO_TCLK_UPDATE;
 #endif
+#else  // ADAPTIV_LIGHT
+sl_zigbee_af_plugin_network_steering_options_t sli_zigbee_af_network_steering_options_mask
+  = SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_OPTIONS_NONE;
+#endif // ADAPTIV_LIGHT
 
 //============================================================================
 // Externs
@@ -321,6 +330,7 @@ static sl_zigbee_af_plugin_network_steering_joining_state_t getFirstPrimaryState
 #ifdef TRY_ALL_KEYS
   return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_USE_ALL_KEYS;
 #else
+#ifdef ADAPTIV_LIGHT
 #ifndef MODIFY_JOIN_PROCESS
   return (gUseConfiguredKey
           ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_CONFIGURED
@@ -330,6 +340,11 @@ static sl_zigbee_af_plugin_network_steering_joining_state_t getFirstPrimaryState
           ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_CONFIGURED
           : SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_CENTRALIZED);
 #endif
+#else  // ADAPTIV_LIGHT
+  return (gUseConfiguredKey
+          ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_CONFIGURED
+          : SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_INSTALL_CODE);
+#endif // ADAPTIV_LIGHT
 #endif
 }
 
@@ -338,11 +353,15 @@ static sl_zigbee_af_plugin_network_steering_joining_state_t getLastPrimaryState(
 #ifdef TRY_ALL_KEYS
   return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_USE_ALL_KEYS;
 #else
+#ifdef ADAPTIV_LIGHT
 #ifndef MODIFY_JOIN_PROCESS
   return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_DISTRIBUTED;
 #else
   return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_DISTRIBUTED;
 #endif
+#else  // ADAPTIV_LIGHT
+  return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_PRIMARY_DISTRIBUTED;
+#endif // ADAPTIV_LIGHT
 #endif
 }
 
@@ -351,6 +370,7 @@ static sl_zigbee_af_plugin_network_steering_joining_state_t getFirstSecondarySta
 #ifdef TRY_ALL_KEYS
   return SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_USE_ALL_KEYS;
 #else
+#ifdef ADAPTIV_LIGHT
 #ifndef MODIFY_JOIN_PROCESS
   return (gUseConfiguredKey
           ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_CONFIGURED
@@ -360,12 +380,21 @@ static sl_zigbee_af_plugin_network_steering_joining_state_t getFirstSecondarySta
           ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_CONFIGURED
           : SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_CENTRALIZED);
 #endif
+#else  // ADAPTIV_LIGHT
+  return (gUseConfiguredKey
+          ? SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_CONFIGURED
+          : SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_SCAN_SECONDARY_INSTALL_CODE);
+#endif // ADAPTIV_LIGHT
 #endif
 }
 
 void sli_zigbee_af_network_steering_stack_status_callback(sl_status_t status)
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_core_println("%s stack status 0x%02X   <%d>", PLUGIN_NAME, status, get_time_ms());
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_core_println("%s stack status 0x%02X", PLUGIN_NAME, status);
+#endif // ADAPTIV_LIGHT
 
   if (sli_zigbee_af_network_steering_state
       == SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_STATE_NONE) {
@@ -547,7 +576,11 @@ static sl_status_t goToNextState(void)
 
 static void cleanupAndStop(sl_status_t status)
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_core_println("%s Stop..  Cleaning up.", PLUGIN_NAME);
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_core_println("%s Stop.  Cleaning up.", PLUGIN_NAME);
+#endif // ADAPTIV_LIGHT
   sl_zigbee_af_network_steering_complete_cb(status,
                                             sli_zigbee_af_network_steering_total_beacons,
                                             sli_zigbee_af_network_steering_join_attempts,
@@ -564,10 +597,18 @@ static void cleanupAndStop(sl_status_t status)
 static void stateMachineRun(void)
 {
   sl_status_t status;
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_core_println("%s State: %s   <%d>",
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_core_println("%s State: %s",
+#endif // ADAPTIV_LIGHT
                             PLUGIN_NAME,
+#ifdef ADAPTIV_LIGHT
                             sli_zigbee_af_network_steering_stateNames[sli_zigbee_af_network_steering_state],
                             get_time_ms());
+#else  // ADAPTIV_LIGHT
+                            sli_zigbee_af_network_steering_stateNames[sli_zigbee_af_network_steering_state]);
+#endif // ADAPTIV_LIGHT
 
   status = setupSecurity();
 
@@ -581,10 +622,18 @@ static void stateMachineRun(void)
       return;
     }
 
+#ifdef ADAPTIV_LIGHT
     sl_zigbee_af_core_println("%s State: %s   <%d>",
+#else  // ADAPTIV_LIGHT
+    sl_zigbee_af_core_println("%s State: %s",
+#endif // ADAPTIV_LIGHT
                               PLUGIN_NAME,
+#ifdef ADAPTIV_LIGHT
                               sli_zigbee_af_network_steering_stateNames[sli_zigbee_af_network_steering_state],
                               get_time_ms());
+#else  // ADAPTIV_LIGHT
+                              sli_zigbee_af_network_steering_stateNames[sli_zigbee_af_network_steering_state]);
+#endif // ADAPTIV_LIGHT
 
     status = setupSecurity();
   }
@@ -798,16 +847,24 @@ void sl_zigbee_af_network_steering_finish_steering_event_handler(sl_zigbee_af_ev
   } else {
     // Broadcast permit join to extend the network.
     // We are done!
+#ifdef ADAPTIV_LIGHT
     if(eADAPTIV_NWK != get_present_network())
     {
        status = sl_zigbee_af_permit_join(SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_COMMISSIONING_TIME_S,
+#else  // ADAPTIV_LIGHT
+    status = sl_zigbee_af_permit_join(SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_COMMISSIONING_TIME_S,
+#endif // ADAPTIV_LIGHT
                                       true); // Broadcast permit join?
        sl_zigbee_af_core_println("%s: %s: 0x%02X",
                               PLUGIN_NAME,
                               "Broadcasting permit join",
                               status);
+#ifdef ADAPTIV_LIGHT
        cleanupAndStop(status);
     }
+#else  // ADAPTIV_LIGHT
+    cleanupAndStop(status);
+#endif // ADAPTIV_LIGHT
     sl_zigbee_af_remove_from_current_app_tasks(SL_ZIGBEE_AF_WAITING_FOR_TC_KEY_UPDATE);
   }
 }
@@ -835,9 +892,13 @@ void sl_zigbee_af_update_tc_link_key_status_cb(sl_zigbee_key_status_t keyStatus)
       }
       default:
         // Failure!
+#ifdef ADAPTIV_LIGHT
         #ifdef NO_LEAVE_ON_TC_LINK_FAILURE
         sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_NO_OPTION);
         #endif
+#else  // ADAPTIV_LIGHT
+        sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_NO_OPTION);
+#endif // ADAPTIV_LIGHT
         cleanupAndStop(SL_STATUS_ZIGBEE_NO_LINK_KEY_RECEIVED);
     }
     sli_zigbee_af_network_steering_state_clear_update_tclk();

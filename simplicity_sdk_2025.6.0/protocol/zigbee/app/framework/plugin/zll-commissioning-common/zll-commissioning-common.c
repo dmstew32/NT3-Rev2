@@ -20,11 +20,13 @@
 #include "app/framework/util/af-main.h"
 #include "app/framework/util/common.h"
 #include "zll-commissioning-common.h"
+#ifdef ADAPTIV_LIGHT
 #if !defined(SL_CATALOG_TOKEN_MANAGER_PRESENT)
 #define DEFINETYPES
 #endif
 #include "stack/config/sl_zigbee_token_defines.h"
 #include "stack/include/sl_zigbee_token.h"
+#endif // ADAPTIV_LIGHT
 
 // The code below assumes that there is exactly one network and that it is
 // ZigBee PRO.
@@ -113,10 +115,14 @@ static void initFactoryNew(void)
 {
   // We use the node type token to indicate if we have joined a network and thus
   tokTypeStackNodeData tokNode;
+#ifdef ADAPTIV_LIGHT
   (void)sl_token_manager_get_data(COMMON_TOKEN_STACK_NODE_DATA,
                                   (void *)&tokNode,
                                   sizeof(tokTypeStackNodeData));
 
+#else  // ADAPTIV_LIGHT
+  halCommonGetToken(&tokNode, TOKEN_STACK_NODE_DATA);
+#endif // ADAPTIV_LIGHT
   // The initialization is only performed if we are factory new in the BDB sense,
   // i.e. not joined to a centralized or distributed network.
   if (sli_zigbee_af_zll_am_factory_new() && (tokNode.nodeType == SL_ZIGBEE_UNKNOWN_DEVICE)) {

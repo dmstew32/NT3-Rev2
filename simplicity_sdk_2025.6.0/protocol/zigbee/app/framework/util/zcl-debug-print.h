@@ -35,6 +35,7 @@
 // the per-cluster print granularity, sl_zigbee_af_print_enabled() always returns TRUE.
 
 // We have a separate config switch (ZIGBEE_DEBUG_PRINTS_AF_DEBUG) for AF Debug because we want it off by default
+#ifdef ADAPTIV_LIGHT
 //JGR#if (defined(SL_CATALOG_ZIGBEE_DEBUG_PRINT_PRESENT) && (SL_ZIGBEE_DEBUG_ZCL_GROUP_ENABLED == 1) && (SL_ZIGBEE_DEBUG_PRINTS_ZCL_LEGACY_AF_DEBUG_ENABLED == 1))
 #if 0
 // Prints messages for random debugging
@@ -55,6 +56,27 @@
 #define sl_zigbee_af_debug_print_string(buffer)
 
 #endif // (defined(SL_CATALOG_ZIGBEE_DEBUG_PRINT_PRESENT) && (SL_ZIGBEE_DEBUG_ZCL_GROUP_ENABLED == 1) && (SL_ZIGBEE_DEBUG_PRINTS_ZCL_LEGACY_AF_DEBUG_ENABLED == 1))
+#else  // ADAPTIV_LIGHT
+#if (defined(SL_CATALOG_ZIGBEE_DEBUG_PRINT_PRESENT) && (SL_ZIGBEE_DEBUG_ZCL_GROUP_ENABLED == 1) && (SL_ZIGBEE_DEBUG_PRINTS_ZCL_LEGACY_AF_DEBUG_ENABLED == 1))
+// Prints messages for random debugging
+#define sl_zigbee_af_debug_print(...) sl_zigbee_af_print(0x00, __VA_ARGS__)
+#define sl_zigbee_af_debug_println(...) sl_zigbee_af_println(0x00, __VA_ARGS__)
+#define sl_zigbee_af_debug_flush()
+#define sl_zigbee_af_debug_debug_exec(x) if ( sl_zigbee_af_print_enabled(0x00) ) { x; }
+#define sl_zigbee_af_debug_print_buffer(buffer, len, withSpace) sl_zigbee_af_print_buffer(0x00, (buffer), (len), (withSpace))
+#define sl_zigbee_af_debug_print_string(buffer) sl_zigbee_af_print_string(0x00, (buffer))
+
+#else
+
+#define sl_zigbee_af_debug_print(...)
+#define sl_zigbee_af_debug_println(...)
+#define sl_zigbee_af_debug_flush()
+#define sl_zigbee_af_debug_debug_exec(x)
+#define sl_zigbee_af_debug_print_buffer(buffer, len, withSpace)
+#define sl_zigbee_af_debug_print_string(buffer)
+
+#endif // (defined(SL_CATALOG_ZIGBEE_DEBUG_PRINT_PRESENT) && (SL_ZIGBEE_DEBUG_ZCL_GROUP_ENABLED == 1) && (SL_ZIGBEE_DEBUG_PRINTS_ZCL_LEGACY_AF_DEBUG_ENABLED == 1))
+#endif // ADAPTIV_LIGHT
 
 #if (defined(SL_CATALOG_ZIGBEE_DEBUG_PRINT_PRESENT) && (SL_ZIGBEE_DEBUG_ZCL_GROUP_ENABLED == 1))
 // Printing macros for Application

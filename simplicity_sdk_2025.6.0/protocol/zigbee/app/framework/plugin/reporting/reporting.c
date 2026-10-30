@@ -490,9 +490,11 @@ bool sl_zigbee_af_configure_reporting_command_cb(const sl_zigbee_af_cluster_comm
           newEntry.data.reported.maxInterval = maxInterval;
           newEntry.data.reported.reportableChange = reportableChange;
           status = sl_zigbee_af_reporting_configure_reported_attribute(&newEntry);
+#ifdef ADAPTIV_LIGHT
           // JGR
           sl_zigbee_af_reporting_println("Report ep %d cluster 0x%X attr 0x%X %d",
             newEntry.endpoint, newEntry.clusterId, newEntry.attributeId, newEntry.data.reported.reportableChange);
+#endif // ADAPTIV_LIGHT
         }
         break;
       }
@@ -1244,7 +1246,9 @@ uint16_t sli_zigbee_af_reporting_conditionally_add_reporting_entry(sl_zigbee_af_
 
 WEAK(sl_zigbee_af_status_t sl_zigbee_af_reporting_configured_cb(const sl_zigbee_af_plugin_reporting_entry_t *entry))
 {
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_app_debug_println("cb rr");
+#endif // ADAPTIV_LIGHT
   return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
 }
 

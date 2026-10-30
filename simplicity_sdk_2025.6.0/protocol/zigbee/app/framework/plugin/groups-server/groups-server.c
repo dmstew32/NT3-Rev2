@@ -32,8 +32,10 @@
 #define GROUP_ID_MIN                   (0x0001U)
 #define GROUP_ID_MAX                   (0xfff7U)
 #define isInvalidGroupId(groupId) ((groupId) < GROUP_ID_MIN || (groupId) > GROUP_ID_MAX)
+#ifdef ADAPTIV_LIGHT
 
 extern void adaptiv_group_added(bool addSub);
+#endif // ADAPTIV_LIGHT
 
 static uint8_t findGroupIndex(uint8_t endpoint, uint16_t groupId);
 
@@ -193,7 +195,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_groups_cluster_view_group_cb(sl_z
       sl_zigbee_af_groups_server_get_group_name_cb(sl_zigbee_af_current_endpoint(),
                                                    cmd_data.groupId,
                                                    groupName);
+#ifdef ADAPTIV_LIGHT
       sl_zigbee_af_groups_cluster_println("GroupID 0x%X Name %s",cmd_data.groupId, groupName);
+#endif // ADAPTIV_LIGHT
     }
   }
 
@@ -215,11 +219,13 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_groups_cluster_get_group_membersh
   uint8_t count = 0;
   uint8_t list[SL_ZIGBEE_BINDING_TABLE_SIZE << 1];
   uint8_t listLen = 0;
+#ifdef ADAPTIV_LIGHT
 
   sl_zigbee_multicast_table_entry_t* pTable = sl_zigbee_get_multicast_table();
   for (i = 0; i < sl_zigbee_get_multicast_table_size(); i++) {
      sl_zigbee_af_groups_cluster_println("[%d]  0x%X  %d", i, pTable->multicastId, pTable->endpoint);
   }
+#endif // ADAPTIV_LIGHT
 
   if (zcl_decode_groups_cluster_get_group_membership_command(cmd, &cmd_data)
       != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
@@ -450,7 +456,9 @@ uint32_t sl_zigbee_af_groups_cluster_server_command_parse(sl_service_opcode_t op
       case ZCL_ADD_GROUP_COMMAND_ID:
       {
         status = sl_zigbee_af_groups_cluster_add_group_cb(cmd);
+#ifdef ADAPTIV_LIGHT
         adaptiv_group_added(true);
+#endif // ADAPTIV_LIGHT
         break;
       }
       case ZCL_ADD_GROUP_IF_IDENTIFYING_COMMAND_ID:
@@ -466,13 +474,17 @@ uint32_t sl_zigbee_af_groups_cluster_server_command_parse(sl_service_opcode_t op
       case ZCL_REMOVE_ALL_GROUPS_COMMAND_ID:
       {
         status = sl_zigbee_af_groups_cluster_remove_all_groups_cb();
+#ifdef ADAPTIV_LIGHT
         adaptiv_group_added(false);
+#endif // ADAPTIV_LIGHT
         break;
       }
       case ZCL_REMOVE_GROUP_COMMAND_ID:
       {
         status = sl_zigbee_af_groups_cluster_remove_group_cb(cmd);
+#ifdef ADAPTIV_LIGHT
         adaptiv_group_added(false);
+#endif // ADAPTIV_LIGHT
         break;
       }
       case ZCL_VIEW_GROUP_COMMAND_ID:
@@ -486,6 +498,7 @@ uint32_t sl_zigbee_af_groups_cluster_server_command_parse(sl_service_opcode_t op
   return status;
 }
 
+#ifdef ADAPTIV_LIGHT
 // Used in Adaptiv auto commish.
 // NOTE: Assume ep 1
 sl_zigbee_af_status_t manually_add_group(uint16_t new_group)
@@ -501,3 +514,5 @@ sl_zigbee_af_status_t manually_add_group(uint16_t new_group)
   }
   return(status);
 }
+
+#endif // ADAPTIV_LIGHT

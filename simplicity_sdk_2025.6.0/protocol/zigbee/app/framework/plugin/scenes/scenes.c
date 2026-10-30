@@ -19,15 +19,19 @@
 #include "../../include/af.h"
 #include "../../util/common.h"
 #include "scenes.h"
+#ifdef ADAPTIV_LIGHT
 #include "light_on_off.h"
 #include "hal_pwm.h"
+#endif // ADAPTIV_LIGHT
 
 #include "zap-cluster-command-parser.h"
 #ifdef SL_CATALOG_ZIGBEE_ZLL_SCENES_SERVER_PRESENT
 #include "zll-scenes-server.h"
 #endif
+#ifdef ADAPTIV_LIGHT
 
 #define PRINT_SCENE
+#endif // ADAPTIV_LIGHT
 
 uint8_t sl_zigbee_af_scenes_server_entries_in_use = 0;
 #if (SL_ZIGBEE_AF_PLUGIN_SCENES_USE_TOKENS == 0) || defined(EZSP_HOST)
@@ -404,7 +408,11 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_scenes_cluster_store_scene_cb(sl_
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_scenes_cluster_println("RX: StoreScene Grp:0x%04X, ID:0x%02X", cmd_data.groupId, cmd_data.sceneId);
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_scenes_cluster_println("RX: StoreScene 0x%04X, 0x%02X", cmd_data.groupId, cmd_data.sceneId);
+#endif // ADAPTIV_LIGHT
   status = sl_zigbee_af_scenes_cluster_store_current_scene_cb(sl_zigbee_af_current_endpoint(),
                                                               cmd_data.groupId,
                                                               cmd_data.sceneId);
@@ -466,7 +474,11 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_scenes_cluster_recall_scene_cb(sl
     cmd_data.transitionTime = 0xFFFF;
   }
 
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_scenes_cluster_println("RX: RecallScene Grp:0x%04X, ID:0x%02X, xt:0x%04X",
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_scenes_cluster_println("RX: RecallScene 0x%04X, 0x%02X, 0x%04X",
+#endif // ADAPTIV_LIGHT
                                       cmd_data.groupId,
                                       cmd_data.sceneId,
                                       cmd_data.transitionTime);
@@ -482,10 +494,12 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_scenes_cluster_recall_scene_cb(sl
                                                                  cmd_data.groupId,
                                                                  cmd_data.sceneId);
     }
+#ifdef ADAPTIV_LIGHT
   }
   else
   {
      sl_zigbee_af_scenes_cluster_println("sl_zigbee_af_scenes_cluster_recall_scene_cb Status 0x%X", status);
+#endif // ADAPTIV_LIGHT
   }
 #ifdef SL_CATALOG_ZIGBEE_ZLL_SCENES_SERVER_PRESENT
   if (status == SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
@@ -666,7 +680,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_scenes_server_parse_add_scene(con
 #endif
 #ifdef ZCL_USING_LEVEL_CONTROL_CLUSTER_SERVER
   entry.hasCurrentLevelValue = false;
+#ifdef ADAPTIV_LIGHT
   entry.hasCurrentXValue = false;
+#endif // ADAPTIV_LIGHT
 #endif
 #ifdef ZCL_USING_THERMOSTAT_CLUSTER_SERVER
   entry.hasOccupiedCoolingSetpointValue = false;
@@ -733,10 +749,12 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_scenes_server_parse_add_scene(con
         // here.
         entry.hasCurrentLevelValue = true;
         entry.currentLevelValue = sl_zigbee_af_get_int8u(extensionFieldSets, extensionFieldSetsIndex, extensionFieldSetsLen);
+#ifdef ADAPTIV_LIGHT
         entry.hasCurrentXValue = true;
         entry.currentXValue = get_light_color();
         sl_zigbee_af_scenes_cluster_print("Added scene level %d color %d",
                                 entry.currentLevelValue, entry.currentXValue);
+#endif // ADAPTIV_LIGHT
         break;
 #endif
 #ifdef ZCL_USING_THERMOSTAT_CLUSTER_SERVER
@@ -1143,12 +1161,14 @@ sl_zigbee_af_status_t sl_zigbee_af_scenes_cluster_store_current_scene_cb(uint8_t
                                                    "current level",
                                                    (uint8_t *)&entry.currentLevelValue,
                                                    sizeof(entry.currentLevelValue));
+#ifdef ADAPTIV_LIGHT
   entry.hasCurrentXValue = true;
   entry.onOffValue = true;
   entry.currentLevelValue = hal_get_dim_pwm_255();
   entry.currentXValue = get_light_color();
   sl_zigbee_af_scenes_cluster_println("Scene level %d color %d",
                             entry.currentLevelValue, entry.currentXValue);
+#endif // ADAPTIV_LIGHT
 #endif
 
 #ifdef ZCL_USING_THERMOSTAT_CLUSTER_SERVER
@@ -1317,7 +1337,9 @@ sl_zigbee_af_status_t sl_zigbee_af_scenes_cluster_recall_saved_scene_cb(uint8_t 
 {
   if (groupId != ZCL_SCENES_GLOBAL_SCENE_GROUP_ID
       && !sl_zigbee_af_groups_cluster_endpoint_in_group_cb(endpoint, groupId)) {
+#ifdef ADAPTIV_LIGHT
       sl_zigbee_af_level_control_cluster_println("Scene Group ID != global", groupId);
+#endif // ADAPTIV_LIGHT
     return SL_ZIGBEE_ZCL_STATUS_INVALID_FIELD;
   } else {
     uint8_t i;
@@ -1329,6 +1351,7 @@ sl_zigbee_af_status_t sl_zigbee_af_scenes_cluster_recall_saved_scene_cb(uint8_t 
           && entry.sceneId == sceneId) {
 #ifdef ZCL_USING_ON_OFF_CLUSTER_SERVER
         if (entry.hasOnOffValue) {
+#ifdef ADAPTIV_LIGHT
 #if 0
           writeServerAttribute(endpoint,
                                ZCL_ON_OFF_CLUSTER_ID,
@@ -1337,10 +1360,19 @@ sl_zigbee_af_status_t sl_zigbee_af_scenes_cluster_recall_saved_scene_cb(uint8_t 
                                (uint8_t *)&entry.onOffValue,
                                ZCL_BOOLEAN_ATTRIBUTE_TYPE);
 #endif
+#else  // ADAPTIV_LIGHT
+          writeServerAttribute(endpoint,
+                               ZCL_ON_OFF_CLUSTER_ID,
+                               ZCL_ON_OFF_ATTRIBUTE_ID,
+                               "on/off",
+                               (uint8_t *)&entry.onOffValue,
+                               ZCL_BOOLEAN_ATTRIBUTE_TYPE);
+#endif // ADAPTIV_LIGHT
         }
 #endif
 #ifdef ZCL_USING_LEVEL_CONTROL_CLUSTER_SERVER
         if (entry.hasCurrentLevelValue) {
+#ifdef ADAPTIV_LIGHT
 #if 0
             writeServerAttribute(endpoint,
                                ZCL_LEVEL_CONTROL_CLUSTER_ID,
@@ -1353,6 +1385,14 @@ sl_zigbee_af_status_t sl_zigbee_af_scenes_cluster_recall_saved_scene_cb(uint8_t 
           move_to_level_onoff(entry.currentLevelValue, 10);
           sl_zigbee_af_level_control_cluster_println("Scene recall level %d color %d",
                                      entry.currentLevelValue, entry.currentXValue);
+#else  // ADAPTIV_LIGHT
+          writeServerAttribute(endpoint,
+                               ZCL_LEVEL_CONTROL_CLUSTER_ID,
+                               ZCL_CURRENT_LEVEL_ATTRIBUTE_ID,
+                               "current level",
+                               (uint8_t *)&entry.currentLevelValue,
+                               ZCL_INT8U_ATTRIBUTE_TYPE);
+#endif // ADAPTIV_LIGHT
         }
 #endif
 #ifdef ZCL_USING_THERMOSTAT_CLUSTER_SERVER

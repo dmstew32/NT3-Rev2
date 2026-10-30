@@ -23,11 +23,13 @@
 #include "update-tc-link-key-config.h"
 
 #include "app/framework/plugin/network-steering/network-steering-internal.h"
+#ifdef ADAPTIV_LIGHT
 
 #ifdef TC_LINK_KEY_FIX
 uint8_t get_tc_key_counter(void);
 #endif
 #include "hal_utils.h"
+#endif // ADAPTIV_LIGHT
 
 static bool inRequest = false;
 
@@ -71,6 +73,7 @@ void sl_zigbee_af_update_tc_link_key_set_inactive(void)
 void sl_zigbee_af_update_tc_link_key_zigbee_key_establishment_cb(sl_802154_long_addr_t partner,
                                                                  sl_zigbee_key_status_t status)
 {
+#ifdef ADAPTIV_LIGHT
   #ifdef TC_LINK_KEY_FIX
   if(1 < get_tc_key_counter())
   {
@@ -78,6 +81,7 @@ void sl_zigbee_af_update_tc_link_key_zigbee_key_establishment_cb(sl_802154_long_
      return;
   }
   #endif
+#endif // ADAPTIV_LIGHT
   if (inRequest) {
     sl_zigbee_af_core_print("%s:", SL_ZIGBEE_AF_PLUGIN_UPDATE_TC_LINK_KEY_PLUGIN_NAME);
 
@@ -87,7 +91,11 @@ void sl_zigbee_af_update_tc_link_key_zigbee_key_establishment_cb(sl_802154_long_
     } else if (status != SL_ZIGBEE_APP_LINK_KEY_ESTABLISHED) {
       sl_zigbee_af_core_print(" Error:");
     }
+#ifdef ADAPTIV_LIGHT
     sl_zigbee_af_core_println(" 0x%02X   <%d>", status, get_time_ms());
+#else  // ADAPTIV_LIGHT
+    sl_zigbee_af_core_println(" 0x%02X", status);
+#endif // ADAPTIV_LIGHT
     sl_zigbee_af_core_print("Partner: ");
     sl_zigbee_af_core_print_buffer(partner, EUI64_SIZE, true); // withSpace?
     sl_zigbee_af_core_println("");

@@ -78,7 +78,11 @@ static sl_gpio_callbacks_t gpio_interrupts = { 0 };
 /*******************************************************************************
  ******************************   LOCAL FUCTIONS   *****************************
  ******************************************************************************/
+#ifdef ADAPTIV_LIGHT
 //static void sl_gpio_dispatch_interrupt(uint32_t iflags);
+#else  // ADAPTIV_LIGHT
+static void sl_gpio_dispatch_interrupt(uint32_t iflags);
+#endif // ADAPTIV_LIGHT
 
 /***************************************************************************//**
  *   Driver GPIO Initialization.
@@ -757,6 +761,7 @@ sl_status_t sl_gpio_is_locked(bool *state)
   return SL_STATUS_OK;
 }
 
+#ifdef ADAPTIV_LIGHT
 #if 0
 /***************************************************************************//**
  * Function calls users callback for registered pin interrupts.
@@ -825,3 +830,71 @@ void GPIO_ODD_IRQHandler(void)
   sl_gpio_dispatch_interrupt(odd_flags);
 }
 #endif
+#else  // ADAPTIV_LIGHT
+/***************************************************************************//**
+ * Function calls users callback for registered pin interrupts.
+ *
+ * @details This function is called when GPIO interrupts are handled by the IRQHandlers.
+ *          Function gets even or odd interrupt flags and calls user callback
+ *          registered for that pin. Function iterates on flags starting from MSB.
+ *
+ * @param iflags Interrupt flags which shall be handled by the dispatcher.
+ ******************************************************************************/
+static void sl_gpio_dispatch_interrupt(uint32_t iflags)
+{
+  uint32_t irq_idx;
+  sl_gpio_callback_desc_t *callback;
+  sl_gpio_irq_callback_t func;
+
+  // Check for flags set in IF register.
+  while (iflags != 0) {
+    irq_idx = SL_CTZ(iflags);
+    iflags &= ~(1UL << irq_idx);
+
+    if (irq_idx <= SL_HAL_GPIO_INTERRUPT_MAX) {
+      callback = &gpio_interrupts.callback_ext[irq_idx];
+    } else {
+      callback = &gpio_interrupts.callback_em4[irq_idx - SL_HAL_GPIO_EM4WUEN_SHIFT];
+      irq_idx = irq_idx - SL_HAL_GPIO_EM4WUEN_SHIFT;
+    }
+    // Call user callback.
+    if (callback->callback) {
+      func = (sl_gpio_irq_callback_t)(callback->callback);
+      func((uint8_t)irq_idx, callback->context);
+    }
+  }
+}
+
+/***************************************************************************//**
+ *   GPIO EVEN interrupt handler. Interrupt handler clears all IF even flags and
+ *   call the dispatcher passing the flags which triggered the interrupt.
+ ******************************************************************************/
+void GPIO_EVEN_IRQHandler(void)
+{
+  uint32_t even_flags;
+
+  // Gets all enabled and pending even interrupts.
+  even_flags = sl_hal_gpio_get_enabled_pending_interrupts() & SL_HAL_GPIO_INT_IF_EVEN_MASK;
+  // Clears only even interrupts.
+  sl_hal_gpio_clear_interrupts(even_flags);
+
+  sl_gpio_dispatch_interrupt(even_flags);
+}
+
+/***************************************************************************//**
+ * @brief
+ *   GPIO ODD interrupt handler. Interrupt handler clears all IF odd flags and
+ *   call the dispatcher passing the flags which triggered the interrupt.
+ ******************************************************************************/
+void GPIO_ODD_IRQHandler(void)
+{
+  uint32_t odd_flags;
+
+  // Gets all enabled and pending odd interrupts.
+  odd_flags = sl_hal_gpio_get_enabled_pending_interrupts() & SL_HAL_GPIO_INT_IF_ODD_MASK;
+  // Clears only odd interrupts.
+  sl_hal_gpio_clear_interrupts(odd_flags);
+
+  sl_gpio_dispatch_interrupt(odd_flags);
+}
+#endif // ADAPTIV_LIGHT

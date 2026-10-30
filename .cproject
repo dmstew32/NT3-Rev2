@@ -194,6 +194,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.def.symbols.126254336" name="Defined symbols (-D)" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="EFR32MG21A020F1024IM32=1"/>
+									<listOptionValue builtIn="false" value="ADAPTIV_LIGHT=1"/>
 									<listOptionValue builtIn="false" value="SL_CODE_COMPONENT_SYSTEM=system"/>
 									<listOptionValue builtIn="false" value="SL_APP_PROPERTIES=1"/>
 									<listOptionValue builtIn="false" value="SL_CODE_COMPONENT_BYTE_UTILITIES=byte_utilities"/>
@@ -403,6 +404,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.as.def.symbols.1394310949" name="Defined symbols (-D)" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.as.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="EFR32MG21A020F1024IM32=1"/>
+									<listOptionValue builtIn="false" value="ADAPTIV_LIGHT=1"/>
 									<listOptionValue builtIn="false" value="SL_CODE_COMPONENT_SYSTEM=system"/>
 									<listOptionValue builtIn="false" value="SL_APP_PROPERTIES=1"/>
 									<listOptionValue builtIn="false" value="SL_CODE_COMPONENT_BYTE_UTILITIES=byte_utilities"/>

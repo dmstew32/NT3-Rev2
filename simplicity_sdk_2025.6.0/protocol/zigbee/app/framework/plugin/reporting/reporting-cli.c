@@ -26,7 +26,9 @@
 void sli_zigbee_af_reporting_cli_print(sl_cli_command_arg_t *arguments)
 {
   uint16_t i;
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_reporting_println("REPORT [%d]", sli_zigbee_af_reporting_num_entries());
+#endif // ADAPTIV_LIGHT
   for (i = 0; i < sli_zigbee_af_reporting_num_entries(); i++) {
     sl_zigbee_af_plugin_reporting_entry_t entry;
     sli_zigbee_af_reporting_get_entry(i, &entry);

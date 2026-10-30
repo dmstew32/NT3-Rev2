@@ -567,9 +567,15 @@ sl_zigbee_af_status_t sl_zigbee_af_retrieve_attribute_and_craft_response(uint8_t
     return SL_ZIGBEE_ZCL_STATUS_INSUFFICIENT_SPACE;
   }
 
+#ifdef ADAPTIV_LIGHT
   //sl_zigbee_af_attributes_println("OTA READ: ep:%02X cid:%04X attid:%04X msk:%02X mfcode:%04X",
   //                                endpoint,
   //                                clusterId, attrId, mask, manufacturerCode);
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_attributes_println("OTA READ: ep:%02X cid:%04X attid:%04X msk:%02X mfcode:%04X",
+                                  endpoint,
+                                  clusterId, attrId, mask, manufacturerCode);
+#endif // ADAPTIV_LIGHT
 
   // lookup the attribute in our table
   status = sli_zigbee_af_read_attribute(endpoint,
@@ -627,10 +633,18 @@ sl_zigbee_af_status_t sl_zigbee_af_retrieve_attribute_and_craft_response(uint8_t
     return SL_ZIGBEE_ZCL_STATUS_INSUFFICIENT_SPACE;
   }
 
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_af_attributes_println("READ: clus %04X, attr %04X, data: %02X, %02X, OK",
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_af_attributes_println("READ: clus %04X, attr %04X, dataLen: %02X, OK",
+#endif // ADAPTIV_LIGHT
                                   clusterId,
                                   attrId,
+#ifdef ADAPTIV_LIGHT
                                   data[1], data[0]);
+#else  // ADAPTIV_LIGHT
+                                  dataLen);
+#endif // ADAPTIV_LIGHT
   sl_zigbee_af_attributes_flush();
   return status;
 }

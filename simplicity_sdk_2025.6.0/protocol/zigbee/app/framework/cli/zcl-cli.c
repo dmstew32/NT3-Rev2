@@ -22,7 +22,9 @@
 #include "app/framework/util/util.h"
 #include "zap-config.h"
 #include "zcl-cli.h"
+#ifdef ADAPTIV_LIGHT
 #include "nwk_utils.h"
+#endif // ADAPTIV_LIGHT
 
 //------------------------------------------------------------------------------
 // Globals
@@ -1045,6 +1047,7 @@ void sli_zigbee_af_aps_frame_endpoint_setup(uint8_t srcEndpoint,
   globalApsFrame.destinationEndpoint = dstEndpoint;
 }
 
+#ifdef ADAPTIV_LIGHT
 #ifdef DHS_SINK_DEVICE
 void adaptiv_cli_sink_node_info_command(sl_cli_command_arg_t *arguments)
 {
@@ -1059,3 +1062,5 @@ void adaptiv_cli_sink_node_info_command(sl_cli_command_arg_t *arguments)
 
 #endif
 
+
+#endif // ADAPTIV_LIGHT

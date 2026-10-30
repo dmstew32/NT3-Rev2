@@ -30,6 +30,7 @@
 
 #include "identify.h"
 
+#ifdef ADAPTIV_LIGHT
 #include "sl_zigbee_debug_print.h"
 #include "hal_pwm.h"
 #include "light_on_off.h"
@@ -39,13 +40,16 @@
 extern sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_off_cb(void);
 //#define IDENTIFY_PRINT
 
+#endif // ADAPTIV_LIGHT
 typedef struct {
   bool identifying;
   uint16_t identifyTime;
 } sli_zigbee_af_identify_state;
+#ifdef ADAPTIV_LIGHT
 
 static bool id_commanded = false;
 static uint8_t saved_level = DEFAULT_MAX_LIGHT_LEVEL;
+#endif // ADAPTIV_LIGHT
 
 static sli_zigbee_af_identify_state stateTable[SL_ZIGBEE_ZCL_IDENTIFY_CLUSTER_SERVER_ENDPOINT_COUNT];
 
@@ -65,7 +69,9 @@ static sli_zigbee_af_identify_state *getIdentifyState(uint8_t endpoint)
 
 void sl_zigbee_af_identify_cluster_server_init_cb(uint8_t endpoint)
 {
+#ifdef ADAPTIV_LIGHT
   writeIdentifyTime(1, 0x0000);//JGR
+#endif // ADAPTIV_LIGHT
   scheduleIdentifyTick(endpoint);
 }
 
@@ -77,6 +83,7 @@ void sl_zigbee_af_identify_cluster_server_tick_cb(uint8_t endpoint)
     // Changed callback below, which in turn will schedule or cancel the tick.
     // Because of this, the tick does not have to be scheduled here.
     writeIdentifyTime(endpoint, (identifyTime == 0 ? 0 : identifyTime - 1));
+#ifdef ADAPTIV_LIGHT
 
     /*** Send to light, restore when done JGR ***/
     #ifdef IDENTIFY_PRINT
@@ -96,16 +103,19 @@ void sl_zigbee_af_identify_cluster_server_tick_cb(uint8_t endpoint)
            sl_zigbee_af_on_off_cluster_off_cb();
         }
     }
+#endif // ADAPTIV_LIGHT
   }
 }
 
 void sl_zigbee_af_identify_cluster_server_attribute_changed_cb(uint8_t endpoint,
                                                                sl_zigbee_af_attribute_id_t attributeId)
 {
+#ifdef ADAPTIV_LIGHT
   #ifdef IDENTIFY_PRINT
   sl_zigbee_app_debug_println("sl_zigbee_af_identify_cluster_server_attribute_changed_cb ep %d",endpoint);
   #endif
 
+#endif // ADAPTIV_LIGHT
   if (attributeId == ZCL_IDENTIFY_TIME_ATTRIBUTE_ID) {
     scheduleIdentifyTick(endpoint);
   }
@@ -200,8 +210,10 @@ static sl_status_t scheduleIdentifyTick(uint8_t endpoint)
     if (!state->identifying) {
       state->identifying = true;
       state->identifyTime = identifyTime;
+#ifdef ADAPTIV_LIGHT
       // Save original level, restored when done
       saved_level = get_present_light_level();
+#endif // ADAPTIV_LIGHT
       sl_zigbee_af_identify_start_feedback_cb(endpoint,
                                               identifyTime);
     }
@@ -229,7 +241,9 @@ uint32_t sl_zigbee_af_identify_cluster_server_command_parse(sl_service_opcode_t 
     switch (cmd->commandId) {
       case ZCL_IDENTIFY_COMMAND_ID:
       {
+#ifdef ADAPTIV_LIGHT
         id_commanded = true;  //JGR
+#endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_identify_cluster_identify_cb(cmd);
         break;
       }

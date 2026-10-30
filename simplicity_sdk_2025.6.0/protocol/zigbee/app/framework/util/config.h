@@ -146,7 +146,11 @@
 //     it to 0x0000. The customer should be setting this value.
 //   SL_ZIGBEE_COMPANY_MANUFACTURER_CODE is the Ember Corporation's Manufacturer
 //     ID allocated by the Zigbee alliance.  This shall not change.
+#ifdef ADAPTIV_LIGHT
 #define SL_ZIGBEE_COMPANY_MANUFACTURER_CODE 0x1574
+#else  // ADAPTIV_LIGHT
+#define SL_ZIGBEE_COMPANY_MANUFACTURER_CODE 0x1002
+#endif // ADAPTIV_LIGHT
 
 // This is now generated in zap-type.h
 

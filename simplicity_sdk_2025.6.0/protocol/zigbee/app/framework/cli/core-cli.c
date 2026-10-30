@@ -44,8 +44,10 @@ extern uint8_t sli_zigbee_af_cli_network_index;
 #if defined SL_CATALOG_ZIGBEE_TEST_HARNESS_Z3_PRESENT && !defined EMBER_TEST
 extern void sli_get_ztt_version_number_string(char *versionString);
 #endif
+#ifdef ADAPTIV_LIGHT
 
 extern void spew_app_info(void);
+#endif // ADAPTIV_LIGHT
 
 #ifdef SL_CATALOG_RAIL_UTIL_IEEE802154_PHY_SELECT_PRESENT
 void  sli_get_pti_radio_config(sl_cli_command_arg_t *arguments)
@@ -240,7 +242,11 @@ void sli_zigbee_af_cli_info_command(sl_cli_command_arg_t *arguments)
 #else
   printMfgString();
 #endif
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_core_debug_println("AppBuilder MFG Code: 0x%04X", ADAPTIV_ZIGBEE_MFG_ID);
+#else  // ADAPTIV_LIGHT
+  sl_zigbee_core_debug_println("AppBuilder MFG Code: 0x%04X", SL_ZIGBEE_ZCL_MANUFACTURER_CODE);
+#endif // ADAPTIV_LIGHT
   sl_zigbee_af_get_eui64(myEui64);
   sl_zigbee_af_get_network_parameters(&nodeTypeResult, &networkParams);
   sl_zigbee_core_debug_print("node [");
@@ -374,7 +380,9 @@ void sli_zigbee_af_cli_info_command(sl_cli_command_arg_t *arguments)
       sl_zigbee_af_pop_network_index();
     }
   }
+#ifdef ADAPTIV_LIGHT
   spew_app_info();
+#endif // ADAPTIV_LIGHT
 }
 
 void sli_zigbee_cli_version_command(sl_cli_command_arg_t *arguments)

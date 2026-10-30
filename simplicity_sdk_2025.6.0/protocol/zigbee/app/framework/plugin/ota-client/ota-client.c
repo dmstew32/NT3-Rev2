@@ -48,10 +48,12 @@
 #else
   #include "stack/include/sl_zigbee.h"
 #endif
+#ifdef ADAPTIV_LIGHT
 
 #include "adaptiv_config.h"
 #include "nwk_utils.h"
 extern uint32_t get_time_ms(void);//JGR
+#endif // ADAPTIV_LIGHT
 
 // TODO: SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_SET_IMAGE_STAMP is no longer a
 // plugin/component option
@@ -121,12 +123,17 @@ static BootloadState currentBootloadState = BOOTLOAD_STATE_NONE;
 static uint8_t myEndpoint = UNDEFINED_ENDPOINT;
 static uint8_t serverEndpoint = UNDEFINED_ENDPOINT;
 static sl_802154_short_addr_t serverNodeId = SL_ZIGBEE_UNKNOWN_NODE_ID;
+#ifdef ADAPTIV_LIGHT
 static bool discoverBusy = false;
 
+#endif // ADAPTIV_LIGHT
 static uint8_t errors = 0;
 static uint32_t totalImageSize = 0;
 static sl_zigbee_af_ota_image_id_t currentDownloadFile;
 static uint16_t hardwareVersion;
+#ifndef ADAPTIV_LIGHT
+static bool discoverBusy = false;
+#endif // ADAPTIV_LIGHT
 
 #define WAIT_FOR_UPGRADE_MESSAGE 0xFFFFFFFF
 
@@ -501,27 +508,41 @@ void sl_zigbee_af_ota_client_stack_status_cb(sl_status_t status)
 {
 #if defined(AUTO_START)
   uint16_t randomDelaySeconds;
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_app_debug_println("sl_zigbee_af_ota_client_stack_status_cb");
+#endif // ADAPTIV_LIGHT
   if (status != SL_STATUS_NETWORK_UP
       || currentBootloadState != BOOTLOAD_STATE_NONE) {
+#ifdef ADAPTIV_LIGHT
       sl_zigbee_app_debug_println("ota fail 0x%X", status);
+#endif // ADAPTIV_LIGHT
     return;
   }
+#ifdef ADAPTIV_LIGHT
   if(eDAINTREE_NWK == get_present_network())
   {
      randomDelaySeconds = (sl_zigbee_get_pseudo_random_number()
+#else  // ADAPTIV_LIGHT
+  randomDelaySeconds = (sl_zigbee_get_pseudo_random_number()
+#endif // ADAPTIV_LIGHT
                         & MAXIMUM_RANDOM_DELAY_SECONDS_MASK);
+#ifdef ADAPTIV_LIGHT
   }
   else
   {
       randomDelaySeconds = get_random_number(10UL*60UL, 5UL*60UL);  // 5 - 10 minutes JGR
   }
+#endif // ADAPTIV_LIGHT
   // EMAPPFWKV2-1516: make sure we don't have a delay time of 0 seconds.
   if (randomDelaySeconds == 0) {
     randomDelaySeconds = 1;
   }
   recordUpgradeStatus(BOOTLOAD_STATE_DELAY);
+#ifdef ADAPTIV_LIGHT
   sl_zigbee_app_debug_println("Delaying %d seconds before starting OTA client", randomDelaySeconds);
+#else  // ADAPTIV_LIGHT
+  otaPrintln("Delaying %d seconds before starting OTA client", randomDelaySeconds);
+#endif // ADAPTIV_LIGHT
   // the setTimer(uint32_t) function wants milliseconds
   setTimer(randomDelaySeconds * MILLISECOND_TICKS_PER_SECOND);
 #endif // AUTO_START
@@ -833,10 +854,17 @@ static void startServerDiscovery(void)
   sl_status_t status;
   uint8_t index;
 
+#ifdef ADAPTIV_LIGHT
   otaPrintln("startServerDiscovery");
+#endif // ADAPTIV_LIGHT
   if (discoverBusy) {
+#ifdef ADAPTIV_LIGHT
     otaPrintln("OTA Service discovery prevented - another is already in progress   <%d>", get_time_ms());
     //return;
+#else  // ADAPTIV_LIGHT
+    otaPrintln("OTA Service discovery prevented - another is already in progress");
+    return;
+#endif // ADAPTIV_LIGHT
   }
   recordUpgradeStatus(BOOTLOAD_STATE_DISCOVER_SERVER);
   serverEndpoint = UNDEFINED_ENDPOINT;
@@ -915,8 +943,10 @@ static void putImageInfoInMessage(void)
   (void) sl_zigbee_af_put_int32u_in_resp(currentDownloadFile.firmwareVersion);
 }
 
+#ifdef ADAPTIV_LIGHT
 extern sl_zigbee_af_ota_image_id_t sli_zigbee_af_ota_find_image_id_by_index(uint8_t index);
 
+#endif // ADAPTIV_LIGHT
 static BootloadState determineDownloadFileStatus(void)
 {
   uint32_t currentOffset;
@@ -947,6 +977,7 @@ static BootloadState determineDownloadFileStatus(void)
     } else {
        otaPrintln("File in storage is same as current running version (0x%08X)",
                  currentVersionInfo.firmwareVersion);
+#ifdef ADAPTIV_LIGHT
        sl_zigbee_af_ota_image_id_t id = sli_zigbee_af_ota_find_image_id_by_index(0);
        sl_zigbee_af_ota_storage_status_t af_status = sl_zigbee_af_ota_storage_delete_image_cb(&id);
 
@@ -962,6 +993,7 @@ static BootloadState determineDownloadFileStatus(void)
        {
          otaPrintln("Failed to delete image");
        }
+#endif // ADAPTIV_LIGHT
     }
   } else {
     otaPrintln("No image found in storage.");
@@ -1013,8 +1045,13 @@ static void recordUpgradeStatus(BootloadState state)
   uint8_t upgradeStatus = bootloadStateToExternalState[state];
   if (currentBootloadState != state) {
     sl_zigbee_af_core_flush();
+#ifdef ADAPTIV_LIGHT
     otaPrintln("Bootload state: %s  ep:%d",
                bootloadStateNames[state], myEndpoint);
+#else  // ADAPTIV_LIGHT
+    otaPrintln("Bootload state: %s",
+               bootloadStateNames[state]);
+#endif // ADAPTIV_LIGHT
     sl_zigbee_af_core_flush();
   }
   currentBootloadState = state;
@@ -1607,10 +1644,12 @@ static void queryNextImage(sli_zigbee_send_next_query_state_t sendQuery,
     }
   }
 
+#ifdef ADAPTIV_LIGHT
   uint32_t next_random_time = get_random_number(
                        (SL_ZIGBEE_AF_OTA_QUERY_DELAY_MS + (1UL*60UL*1000UL)),
                        (SL_ZIGBEE_AF_OTA_QUERY_DELAY_MS - (1UL*60UL*1000UL)));
 
+#endif // ADAPTIV_LIGHT
   if (sendQuery == SEND_QUERY_NOW) {
     if (!queryErrorOccurred) {
       errors = 0;
@@ -1623,11 +1662,19 @@ static void queryNextImage(sli_zigbee_send_next_query_state_t sendQuery,
 
     sendMessage(ZCL_QUERY_NEXT_IMAGE_REQUEST_COMMAND_ID,
                 0,                            // upgrade end status (ignored)
+#ifdef ADAPTIV_LIGHT
                 next_random_time);
                 //JGRSL_ZIGBEE_AF_OTA_QUERY_DELAY_MS);
+#else  // ADAPTIV_LIGHT
+                SL_ZIGBEE_AF_OTA_QUERY_DELAY_MS);
+#endif // ADAPTIV_LIGHT
   } else {
+#ifdef ADAPTIV_LIGHT
     setTimer(next_random_time); // JGR
     //JGRsetTimer(SL_ZIGBEE_AF_OTA_QUERY_DELAY_MS);
+#else  // ADAPTIV_LIGHT
+    setTimer(SL_ZIGBEE_AF_OTA_QUERY_DELAY_MS);
+#endif // ADAPTIV_LIGHT
   }
 }
 
@@ -2337,7 +2384,11 @@ bool sl_zigbee_af_ota_client_get_ignore_non_trust_center()
 
 void sl_zigbee_af_set_disable_ota_downgrades(bool isDisabled)
 {
+#ifdef ADAPTIV_LIGHT
   disableOtaDowngrades = false;//JGRisDisabled;
+#else  // ADAPTIV_LIGHT
+  disableOtaDowngrades = isDisabled;
+#endif // ADAPTIV_LIGHT
 }
 
 bool sl_zigbee_af_get_disable_ota_downgrades()

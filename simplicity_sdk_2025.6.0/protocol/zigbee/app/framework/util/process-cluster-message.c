@@ -71,7 +71,11 @@ bool sli_zigbee_af_process_cluster_specific_command(sl_zigbee_af_cluster_command
   // or identify cluster (see device enabled attr of basic cluster)
   if (!sl_zigbee_af_is_device_enabled(cmd->apsFrame->destinationEndpoint)
       && cmd->apsFrame->clusterId != ZCL_IDENTIFY_CLUSTER_ID) {
+#ifdef ADAPTIV_LIGHT
     sl_zigbee_af_core_println("%s, dropping ep 0x%02X clus 0x%04X cmd 0x%02X",
+#else  // ADAPTIV_LIGHT
+    sl_zigbee_af_core_println("%sd, dropping ep 0x%02X clus 0x%04X cmd 0x%02X",
+#endif // ADAPTIV_LIGHT
                               "disable",
                               cmd->apsFrame->destinationEndpoint,
                               cmd->apsFrame->clusterId,
