@@ -49,6 +49,9 @@
 #include "nwk_commission.h"
 #include "adaptiv_config.h"
 #include "light_on_off.h"
+#include "rx_zcl_handler.h"
+#include "rx_zdo_handler.h"
+#include "tx_queue.h"
 
 #if defined(SL_CATALOG_LED0_PRESENT)
 #include "sl_led.h"
@@ -425,6 +428,49 @@ void sl_zigbee_af_main_init_cb(void)
   sl_zigbee_af_event_init(&red_led_event, red_led_event_handler);
   sl_zigbee_af_event_set_delay_ms(&red_led_event, 750UL);
 
+  // tx / rx management modules (Light/tx, Light/rx)
+  rx_zcl_handler_on_startup();
+  rx_zdo_on_startup();
+  tx_queue_on_startup();
+}
+
+/** @brief Mark buffers
+ * Called by the stack during buffer cleanup.  Messages waiting in the tx queue
+ * hold stack buffers that must be marked here or the stack reclaims them.
+ */
+void sl_zigbee_af_mark_buffers_cb(void)
+{
+  tx_queue_on_mark_buffers_callback();
+}
+
+/** @brief Incoming message
+ * Called by the framework after it has processed the message (ZCL handling,
+ * sl_zigbee_af_pre_command_received_cb(), ...), so this only adds to the existing
+ * processing.  Hands a copy of each message to the rx modules, which notify
+ * any registered callbacks.
+ */
+void sl_zigbee_af_incoming_message_cb(sl_zigbee_incoming_message_type_t type,
+                                      sl_zigbee_aps_frame_t *apsFrame,
+                                      sl_zigbee_rx_packet_info_t *packetInfo,
+                                      uint8_t messageLength,
+                                      uint8_t *message)
+{
+  (void)type;
+
+  if ((apsFrame == NULL) || (packetInfo == NULL) || (message == NULL)) {
+    return;
+  }
+  uint16_t sender = packetInfo->sender_short_id;
+  if (sender == sl_zigbee_get_node_id()) {
+    return;
+  }
+
+  if ((apsFrame->profileId == SL_ZIGBEE_ZDO_PROFILE_ID)
+      && (apsFrame->destinationEndpoint == SL_ZIGBEE_ZDO_ENDPOINT)) {
+    rx_zdo_rx_handler(sender, apsFrame, message, messageLength);
+  } else {
+    rx_zcl_handler_on_rx(sender, apsFrame, message, messageLength);
+  }
 }
 
 /** @brief Complete network steering.
