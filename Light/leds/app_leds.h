@@ -22,8 +22,16 @@
  *  Bad occupancy sensor                green  toggles every sample (fast flicker)
  *  Occupancy sensor stopped            green  off
  *
- * The network status check only blinks red when no other red blink is running;
- * a red blink requested while one is running is ignored (hal_start_flashing_red_led).
+ *
+ * Red priority:  factory reset (held on)  >  button feedback, firmware version
+ *                >  network status.
+ *   Button feedback replaces a network status blink (red off 500 ms first);
+ *   feedback requested while other feedback runs is ignored; nothing else
+ *   touches red during a factory reset.  The network status check only blinks
+ *   when red is free.
+ * Green priority: green flash  >  lux reading  >  occupancy.
+ *   Every light sensor reading is taken with green off (at most ~185 ms);
+ *   occupancy resumes when a flash or reading ends.
  */
 
 #include <stdbool.h>
@@ -59,5 +67,10 @@ void app_leds_show_version_digit(app_led_t led, uint32_t count);
 void app_leds_on_occupancy_sample(bool detected);
 void app_leds_on_bad_occ_sensor(void);
 void app_leds_on_occ_sensor_stopped(void);
+
+// Light sensor: hold green off for a reading.  false = a green flash is running,
+// try again later.  app_leds_green_lux_done() restores green.
+bool app_leds_green_off_for_lux(void);
+void app_leds_green_lux_done(void);
 
 #endif /* APP_LEDS_H_ */

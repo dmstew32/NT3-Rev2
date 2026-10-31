@@ -104,28 +104,27 @@ TEST_F(HalLeds, InitLeavesBothLedsOff)
     EXPECT_FALSE(green_on());
 }
 
-TEST_F(HalLeds, OnOffAreActiveLowAndOnTellsTheLightSensor)
+TEST_F(HalLeds, OnOffAreActiveLowAndRedOnTellsTheLightSensor)
 {
     hal_set_red_led(1);
     EXPECT_TRUE(red_on());
     EXPECT_EQ(1u, set_dhs_time_stamp_fake.call_count);
-    hal_set_green_led(1);
-    EXPECT_TRUE(green_on());
-    EXPECT_EQ(2u, set_dhs_time_stamp_fake.call_count);
+    hal_set_red_led(1);
+    EXPECT_EQ(2u, set_dhs_time_stamp_fake.call_count);    // every red "on"
     hal_set_red_led(0);
-    hal_set_green_led(0);
     EXPECT_FALSE(red_on());
-    EXPECT_FALSE(green_on());
-    EXPECT_EQ(2u, set_dhs_time_stamp_fake.call_count);    // only "on" sets it
+    EXPECT_EQ(2u, set_dhs_time_stamp_fake.call_count);    // not "off"
 }
 
-TEST_F(HalLeds, EveryOnCallTellsTheLightSensorEvenIfAlreadyOn)
+TEST_F(HalLeds, GreenOnDoesNotHoldOffDaylightHarvesting)
 {
-    // (this is why a steady occupancy LED keeps the DHS timestamp fresh)
+    // lux readings are taken with green off instead (app_leds / hal_light_sensor)
     hal_set_green_led(1);
+    EXPECT_TRUE(green_on());
     hal_set_green_led(1);
-    hal_set_green_led(1);
-    EXPECT_EQ(3u, set_dhs_time_stamp_fake.call_count);
+    hal_set_green_led(0);
+    EXPECT_FALSE(green_on());
+    EXPECT_EQ(0u, set_dhs_time_stamp_fake.call_count);
 }
 
 TEST_F(HalLeds, LedsOffTurnsBothOff)
@@ -162,6 +161,27 @@ TEST_F(HalLeds, RedFlashIsRefusedWhileOneIsRunning)
     EXPECT_FALSE(hal_start_flashing_red_led(3, 250, 250));
     std::vector<std::string> expected = { "on@2000", "off" };   // first pattern unchanged
     EXPECT_EQ(expected, run(red_ev(), red_on));
+}
+
+TEST_F(HalLeds, DelayedRedFlashStartsOffThenRunsThePattern)
+{
+    hal_set_red_led(1);
+    EXPECT_TRUE(hal_start_flashing_red_led_after(500, 1, 250, 250));
+    EXPECT_FALSE(red_on());
+    EXPECT_FALSE(is_red_led_free());            // a waiting flash keeps red busy
+    EXPECT_EQ(500u, m_ev[red_ev()].delay);
+    EXPECT_FALSE(hal_start_flashing_red_led(1, 100, 100));
+    std::vector<std::string> expected = { "on@250", "off" };
+    EXPECT_EQ(expected, run(red_ev(), red_on));
+}
+
+TEST_F(HalLeds, GreenFreeOnlyWhileNoGreenFlash)
+{
+    EXPECT_TRUE(is_green_led_free());
+    hal_start_flashing_green_led(1, 100, 100);
+    EXPECT_FALSE(is_green_led_free());
+    run(green_ev(), green_on);
+    EXPECT_TRUE(is_green_led_free());
 }
 
 TEST_F(HalLeds, ZeroFlashesIsRefused)

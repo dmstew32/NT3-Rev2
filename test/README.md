@@ -24,6 +24,7 @@ One test program per module, like Z3Switch's `light_switch/test`:
 | test_button_actions | Light/buttons/button_actions.c |
 | test_hal_leds | Light/hal/hal_leds.c |
 | test_app_leds | Light/leds/app_leds.c (+ network status vs. reference/) |
+| test_hal_light_sensor | Light/hal/hal_light_sensor.c (lux readings with green off) |
 
 How a test is built (see `CMakeLists.txt`):
 

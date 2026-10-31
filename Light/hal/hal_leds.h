@@ -34,12 +34,17 @@ void hal_toggle_green_led(void);
 // Both LEDs off (red, then green).  Safe in interrupt context.
 void hal_leds_off(void);
 
+// Red flash: refused (false) while another red flash is running or waiting to start
 bool hal_start_flashing_red_led(uint32_t n_flashes, uint32_t led_on_time_ms, uint32_t led_off_time_ms);
+bool hal_start_flashing_red_led_after(uint32_t start_delay_ms, uint32_t n_flashes,
+                                      uint32_t led_on_time_ms, uint32_t led_off_time_ms);
 void hal_stop_flashing_red_led(void);
 bool is_red_led_free(void);
 
+// Green flash: replaces a running green flash
 
 bool hal_start_flashing_green_led(uint32_t n_flashes, uint32_t led_on_time_ms, uint32_t led_off_time_ms);
 void hal_stop_flashing_green_led(void);
+bool is_green_led_free(void);
 
 #endif /* HAL_HAL_LEDS_H_ */

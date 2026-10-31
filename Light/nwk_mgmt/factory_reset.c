@@ -40,10 +40,15 @@ static void factory_reset_handler(sl_zigbee_af_event_t *event)
   sl_zigbee_af_event_set_delay_ms(&factory_reset_event, 500UL);
   sl_zigbee_network_status_t nwk_status = sl_zigbee_af_network_state();
 
+  if(9 > factory_reset_state)
+  {
+     // Red on until the reset is done; re-assert every step
+     app_leds_factory_reset(true);
+  }
+
   switch(factory_reset_state)
   {
      case 0:
-        app_leds_factory_reset(true);
         // Stay in this state till not on a nwk
         if(SL_ZIGBEE_JOINED_NETWORK == nwk_status)
         {

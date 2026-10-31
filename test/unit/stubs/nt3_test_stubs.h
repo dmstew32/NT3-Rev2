@@ -187,6 +187,8 @@ typedef union
   int32_t *s32Ptr; uint32_t *u32Ptr; int16_t *s16Ptr; uint16_t *u16Ptr; int8_t *s8Ptr; uint8_t *u8Ptr;
 } taskParm_t;
 typedef void (*test_task_fn_t)(taskParm_t, taskParm_t);
+uint8_t addTask(test_task_fn_t funcPtr, taskParm_t parm0, taskParm_t parm1);   // RehTOS.h
+uint8_t removeTask(test_task_fn_t funcPtr);
 
 /* ---------------------------------------------------------------- application */
 typedef enum

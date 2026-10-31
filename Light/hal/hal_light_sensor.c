@@ -5,6 +5,11 @@
  * Every LIGHT_SENSOR_HAL_SAMPLE_TIME_MS the execute_light_sensor_logic()
  * is called with new average.
  *
+ * The green LED light reaches the sensor, so every reading is a fresh
+ * measurement taken with green off: green off, restart the measurement,
+ * wait LIGHT_SENSOR_MEASURE_MS, read, green back on (app_leds).  Green is off
+ * for about LIGHT_SENSOR_MEASURE_MS.  While a green flash pattern runs the
+ * reading waits (LIGHT_SENSOR_RETRY_MS) for it to end.
  */
 #include <stdlib.h>
 #include "af.h"
@@ -17,6 +22,7 @@
 #include "hal_light_sensor.h"
 #include "light_sensor.h"
 #include "RehTOS.h"
+#include "app_leds.h"
 
 #include "sl_zigbee_debug_print.h"
 
@@ -27,7 +33,14 @@
 #endif
 //#define
 
-static sl_zigbee_af_event_t light_sensor_event;
+#define LIGHT_SENSOR_MODE_HI_RES   (0x12)
+// Sensor's maximum high resolution measurement time (typical 120 ms)
+#define LIGHT_SENSOR_MEASURE_MS    (180UL)
+#define LIGHT_SENSOR_RETRY_MS      (50UL)
+
+static sl_zigbee_af_event_t light_sensor_event;       // every sample period
+static sl_zigbee_af_event_t light_sensor_read_event;  // green off -> measure -> read
+static bool light_sensor_measuring = false;
 static light_sensor_info_t light_sensor_info = {0,};
 
 // Fwd declarations
@@ -75,7 +88,41 @@ static void update_light_sensor_task(taskParm_t parm0, taskParm_t parm1)
   #endif
 }
 
-// Ticks every LIGHT_SENSOR_HAL_SAMPLE_TIME_MS.  Does 1 reading from the sensor.
+// Takes one reading with the green LED off, see top of file.
+static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
+{
+  (void)event;
+  if(!light_sensor_measuring)
+  {
+     if(!app_leds_green_off_for_lux())
+     {
+        // Green flash running
+        sl_zigbee_af_event_set_delay_ms(&light_sensor_read_event, LIGHT_SENSOR_RETRY_MS);
+        return;
+     }
+     // Restart the measurement so all of it is in the dark
+     (void)hal_light_sensor_set_mode(LIGHT_SENSOR_MODE_HI_RES);
+     light_sensor_measuring = true;
+     sl_zigbee_af_event_set_delay_ms(&light_sensor_read_event, LIGHT_SENSOR_MEASURE_MS);
+     return;
+  }
+
+  uint16_t reading = hal_light_sensor_read_data();
+  light_sensor_measuring = false;
+  app_leds_green_lux_done();
+
+  // Start average/logic outside of ember event
+  taskParm_t arg0, arg1;
+  arg0.u32 = get_time_ms();
+  arg1.u16 = reading;
+  addTask(update_light_sensor_task, arg0, arg1 );
+
+  #if (0 != HAL_LIGHT_SENSOR_PRINT)
+  sl_zigbee_app_debug_println("[%d] %d   <%d>", light_sensor_info.index, reading, get_time_ms());
+  #endif
+}
+
+// Ticks every LIGHT_SENSOR_HAL_SAMPLE_TIME_MS.  Starts 1 reading from the sensor.
 // Generates stats via update_light_sensor().  Once the buffer has been filled,
 // N_LIGHT_SAMPLES,  call the logic.
 static void light_sensor_handler(sl_zigbee_af_event_t *event)
@@ -90,15 +137,11 @@ static void light_sensor_handler(sl_zigbee_af_event_t *event)
      sl_zigbee_af_event_set_delay_ms(&light_sensor_event, LIGHT_SENSOR_HAL_SAMPLE_TIME_MS);
   }
 
-  // Start average/logic outside of ember event
-  taskParm_t arg0, arg1;
-  arg0.u32 = get_time_ms();
-  arg1.u16 = hal_light_sensor_read_data();
-  addTask(update_light_sensor_task, arg0, arg1 );
-
-  #if (0 != HAL_LIGHT_SENSOR_PRINT)
-  sl_zigbee_app_debug_println("[%d] %d   <%d>", light_sensor_info.index, reading, get_time_ms());
-  #endif
+  // Start a reading unless one is in progress (or waiting for a green flash)
+  if(!sl_zigbee_af_event_is_scheduled(&light_sensor_read_event))
+  {
+     sl_zigbee_af_event_set_active(&light_sensor_read_event);
+  }
 }
 
 void start_reading_light_sensor(void)
@@ -117,6 +160,12 @@ void start_reading_light_sensor_for_calibration(void)
 void stop_reading_light_sensor(void)
 {
   sl_zigbee_af_event_set_inactive(&light_sensor_event);
+  sl_zigbee_af_event_set_inactive(&light_sensor_read_event);
+  if(light_sensor_measuring)
+  {
+     light_sensor_measuring = false;
+     app_leds_green_lux_done();
+  }
   sl_zigbee_app_debug_println("DHS stopped   <%d>", get_time_ms());
 }
 
@@ -131,10 +180,11 @@ uint32_t hal_light_sensor_init(void)
 
   if(hal_light_sensor_turn_on())
   {
-     if(hal_light_sensor_set_mode(0x12))   // Hi res
+     if(hal_light_sensor_set_mode(LIGHT_SENSOR_MODE_HI_RES))
      {
         // Set up an event
         sl_zigbee_af_event_init(&light_sensor_event, light_sensor_handler);
+        sl_zigbee_af_event_init(&light_sensor_read_event, light_sensor_read_handler);
 
         // Start continuously reading light sensor
         start_reading_light_sensor();

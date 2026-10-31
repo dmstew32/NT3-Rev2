@@ -65,3 +65,6 @@ nt3_test(test_button_actions  test_button_actions.cpp  ${LIGHT}/buttons/button_a
 # LEDs
 nt3_test(test_hal_leds        test_hal_leds.cpp        ${LIGHT}/hal/hal_leds.c)
 nt3_test(test_app_leds        test_app_leds.cpp        ${LIGHT}/leds/app_leds.c reference/network_status_led_ref.c)
+
+# light sensor
+nt3_test(test_hal_light_sensor test_hal_light_sensor.cpp ${LIGHT}/hal/hal_light_sensor.c)
