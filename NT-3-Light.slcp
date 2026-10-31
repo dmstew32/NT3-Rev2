@@ -36,6 +36,21 @@ source:
 - {path: Light/nwk_sensors/light_sensor.c}
 - {path: Light/nwk_sensors/occ_sensor.c}
 - {path: Light/tasker/RehTOS.c}
+- {path: Light/tx/tx_packet.c}
+- {path: Light/tx/tx_queue.c}
+- {path: Light/tx/tx_zcl.c}
+- {path: Light/tx/tx_zdo.c}
+- {path: Light/rx/rx_zcl_handler.c}
+- {path: Light/rx/rx_zdo_handler.c}
+- {path: Light/rx/zcl_header.c}
+- {path: Light/utils/app_logger.c}
+- {path: Light/utils/byte_utils.c}
+- {path: Light/utils/fsm_event_scheduler.c}
+- {path: Light/time/uptime.c}
+- {path: Light/buttons/app_button.c}
+- {path: Light/buttons/button_actions.c}
+- {path: Light/buttons/fw_version_display.c}
+- {path: Light/leds/app_leds.c}
 tag: [prebuilt_demo]
 sdk: {id: simplicity_sdk, version: 2025.6.3}
 include:
@@ -73,6 +88,37 @@ include:
 - path: Light/tasker
   file_list:
   - {path: RehTOS.h}
+- path: Light/tx
+  file_list:
+  - {path: tx_packet.h}
+  - {path: tx_queue.h}
+  - {path: tx_zcl.h}
+  - {path: tx_zdo.h}
+- path: Light/rx
+  file_list:
+  - {path: rx_zcl_handler.h}
+  - {path: rx_zdo_handler.h}
+  - {path: zcl_header.h}
+- path: Light/utils
+  file_list:
+  - {path: adaptiv_zcl.h}
+  - {path: app_logger.h}
+  - {path: byte_utils.h}
+  - {path: fsm_event_scheduler.h}
+  - {path: network_defines.h}
+  - {path: sys_defines.h}
+- path: Light/time
+  file_list:
+  - {path: time_convert.h}
+  - {path: uptime.h}
+- path: Light/buttons
+  file_list:
+  - {path: app_button.h}
+  - {path: button_actions.h}
+  - {path: fw_version_display.h}
+- path: Light/leds
+  file_list:
+  - {path: app_leds.h}
 toolchain_settings:
 - {option: gcc_compiler_option, value: '-include NT_3_app.h'}
 component:

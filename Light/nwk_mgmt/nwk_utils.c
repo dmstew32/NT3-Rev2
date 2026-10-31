@@ -8,7 +8,6 @@
 #include "factory_reset.h"
 #include "hal_leds.h"
 #include "hal_utils.h"
-#include "hal_buttons.h"
 #include "hal_occ_sensor.h"
 
 #include "em_chip.h"

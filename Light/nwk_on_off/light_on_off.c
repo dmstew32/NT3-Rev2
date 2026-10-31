@@ -16,6 +16,7 @@
 #include "adaptiv_config.h"
 
 #include "sl_zigbee_debug_print.h"
+#include "hal_buttons.h"
 
 static uint8_t _max_light_level = DEFAULT_MAX_LIGHT_LEVEL;
 static uint8_t _mid_light_level = DEFAULT_MID_LIGHT_LEVEL;
@@ -496,4 +497,87 @@ bool set_daintree_configuration_cmd(sl_zigbee_af_cluster_command_t* cmd)
   }
 
   return(false);
+}
+
+/***********************  BUTTON MODES  *********************/
+// Selected with the buttons, see Light/buttons/button_actions.c
+
+// Toggle 50% mode, if on->off or off->on
+void toggle_50_percent_mode(void)
+{
+  uint8_t current_level = read_light_level_attribute(ZCL_CURRENT_LEVEL_ATTRIBUTE_ID);
+  uint8_t next_level;
+  uint8_t original_level;
+
+  if(is_app_flags_nonvol_set(B_50_PERCENT_MODE))
+  {
+     // Turn OFF 50% mode, make bright, pop levels
+     sl_token_get_data(TOKEN_APP_LIGHT_LEVEL_MAX_STASHED, 0, &original_level, sizeof(original_level));
+     save_max_light_level(original_level);
+     sl_token_get_data(TOKEN_APP_LIGHT_LEVEL_MID_STASHED, 0, &original_level, sizeof(original_level));
+     save_mid_light_level(original_level);
+     sl_token_get_data(TOKEN_APP_LIGHT_LEVEL_MIN_STASHED, 0, &original_level, sizeof(original_level));
+     save_min_light_level(original_level);
+
+     next_level = current_level << 1;
+     set_app_flags_nonvol(B_50_PERCENT_MODE, 0);
+     if(next_level >= get_max_light_level())
+     {
+        next_level = get_max_light_level() - 1;
+     }
+     move_to_level_onoff(next_level, 0);
+  }
+  else
+  {
+     // Show in 50% mode, dim now with present limits
+     next_level = current_level >> 1;
+     next_level = (next_level < MIN_ALLOWABLE_LIGHT_LEVEL) ? MIN_ALLOWABLE_LIGHT_LEVEL : next_level;
+     move_to_level_onoff(next_level, 0);
+     set_app_flags_nonvol(B_50_PERCENT_MODE, 1);
+
+     // Save present limits, then 1/2 them
+     original_level = get_max_light_level();
+     sl_token_set_data(TOKEN_APP_LIGHT_LEVEL_MAX_STASHED, 0, &original_level, sizeof(original_level));
+     original_level >>= 1;
+     original_level = (original_level < MIN_ALLOWABLE_LIGHT_LEVEL) ? MIN_ALLOWABLE_LIGHT_LEVEL : original_level;
+     save_max_light_level(original_level);
+
+     original_level = get_mid_light_level();
+     sl_token_set_data(TOKEN_APP_LIGHT_LEVEL_MID_STASHED, 0, &original_level, sizeof(original_level));
+     original_level >>= 1;
+     original_level = (original_level < MIN_ALLOWABLE_LIGHT_LEVEL) ? MIN_ALLOWABLE_LIGHT_LEVEL : original_level;
+     save_mid_light_level(original_level);
+
+     original_level = get_min_light_level();
+     sl_token_set_data(TOKEN_APP_LIGHT_LEVEL_MIN_STASHED, 0, &original_level, sizeof(original_level));
+     original_level >>= 1;
+     save_min_light_level(original_level);
+  }
+
+  #if (BUTTON_PRINT > 0)
+  sl_zigbee_core_debug_println("Setting 50% mode   <%d>", get_time_ms());
+  #endif
+
+  return;
+}
+
+void toggle_em_mode(void)
+{
+  if(is_app_flags_nonvol_set(B_EM_MODE))
+  {
+     // Turn OFF EM mode, place light in mid level
+     set_app_flags_nonvol(B_EM_MODE, 0);
+  }
+  else
+  {
+     // Turn ON EM mode, place light in max level
+     set_app_flags_nonvol(B_EM_MODE, 1);
+  }
+
+  #if (BUTTON_PRINT > 0)
+  sl_zigbee_core_debug_println("EM mode %s   <%d>",
+          is_app_flags_nonvol_set(B_EM_MODE) ? "ON" : "OFF", get_time_ms());
+  #endif
+
+  return;
 }

@@ -49,6 +49,10 @@
 #include "nwk_commission.h"
 #include "adaptiv_config.h"
 #include "light_on_off.h"
+#include "app_leds.h"
+#include "rx_zcl_handler.h"
+#include "rx_zdo_handler.h"
+#include "tx_queue.h"
 
 #if defined(SL_CATALOG_LED0_PRESENT)
 #include "sl_led.h"
@@ -64,9 +68,6 @@
 #define led_toggle(led)
 #endif // SL_CATALOG_LED0_PRESENT
 
-#define LED_ON_TIME                500UL
-#define LED_OFF_TIME               500UL
-#define LED_CHECK_PERIOD_MS        (5000UL + LED_ON_TIME + LED_OFF_TIME)
 
 #define ATTEMPT_TO_JOIN_PERIOD_MS  (10UL*1000UL)    // 10 secs
 #define ATTEMPT_TO_JOIN_LONG_MS    (120UL*60UL*1000UL)  // 2 hrs
@@ -87,7 +88,6 @@
 static sl_zigbee_af_event_t commissioning_event;
 static sl_zigbee_af_event_t which_nwk_we_on_event;
 static sl_zigbee_af_event_t finding_and_binding_event;
-static sl_zigbee_af_event_t red_led_event;
 
 static void spew_nwkParams(sl_zigbee_network_parameters_t *nwkParams);
 
@@ -264,53 +264,6 @@ static void finding_and_binding_event_handler(sl_zigbee_af_event_t *event)
   }
 }
 
-// Long 2 sec at por if not joined
-// 1 quick if joined but not grouped
-// 2 quick if not joined
-static void red_led_event_handler(sl_zigbee_af_event_t *event)
-{
-  static bool por_not_joined_red_led_done = false;  // Reset only at por
-  sl_zigbee_network_status_t nwk_status = sl_zigbee_af_network_state();
-
-  (void)event;
-  if((SL_ZIGBEE_JOINED_NETWORK == nwk_status) && device_is_in_a_group())
-  {
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, 2UL*LED_CHECK_PERIOD_MS);
-     if(is_red_led_free())
-     {
-        hal_set_red_led(0);
-     }
-  }
-  else if((SL_ZIGBEE_JOINED_NETWORK == nwk_status) && !device_is_in_a_group())
-  {
-     if(is_red_led_free())
-     {
-        // Joined, not grouped, 2 blinks
-        hal_start_flashing_red_led(2UL, LED_ON_TIME, LED_OFF_TIME);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS);
-  }
-  else if(por_not_joined_red_led_done)
-  {
-     if(is_red_led_free())
-     {
-        // Not joined and initial long por red led happened, 1 blink
-        hal_start_flashing_red_led(1UL, LED_ON_TIME, LED_OFF_TIME);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS);
-  }
-  else
-  {
-     // Not joined and initial long por red led not happened
-     por_not_joined_red_led_done = true;
-     if(is_red_led_free())
-     {
-        hal_start_flashing_red_led(1UL, 2000UL, 5UL);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS + 2000UL);
-  }
-}
-
 // This is called from sl_zigbee_af_stack_status_cb() when we get on a nwk,
 // so to get ieee number.  Also called if no ota comms after tbd time.
 void which_nwk_we_on_handler(void)
@@ -422,9 +375,51 @@ void sl_zigbee_af_main_init_cb(void)
   // Init only here, activated when up/joined
   sl_zigbee_af_event_init(&which_nwk_we_on_event, which_nwk_we_on_handler);
 #endif
-  sl_zigbee_af_event_init(&red_led_event, red_led_event_handler);
-  sl_zigbee_af_event_set_delay_ms(&red_led_event, 750UL);
+  app_leds_network_status_start();
 
+  // tx / rx management modules (Light/tx, Light/rx)
+  rx_zcl_handler_on_startup();
+  rx_zdo_on_startup();
+  tx_queue_on_startup();
+}
+
+/** @brief Mark buffers
+ * Called by the stack during buffer cleanup.  Messages waiting in the tx queue
+ * hold stack buffers that must be marked here or the stack reclaims them.
+ */
+void sl_zigbee_af_mark_buffers_cb(void)
+{
+  tx_queue_on_mark_buffers_callback();
+}
+
+/** @brief Incoming message
+ * Called by the framework after it has processed the message (ZCL handling,
+ * sl_zigbee_af_pre_command_received_cb(), ...), so this only adds to the existing
+ * processing.  Hands a copy of each message to the rx modules, which notify
+ * any registered callbacks.
+ */
+void sl_zigbee_af_incoming_message_cb(sl_zigbee_incoming_message_type_t type,
+                                      sl_zigbee_aps_frame_t *apsFrame,
+                                      sl_zigbee_rx_packet_info_t *packetInfo,
+                                      uint8_t messageLength,
+                                      uint8_t *message)
+{
+  (void)type;
+
+  if ((apsFrame == NULL) || (packetInfo == NULL) || (message == NULL)) {
+    return;
+  }
+  uint16_t sender = packetInfo->sender_short_id;
+  if (sender == sl_zigbee_get_node_id()) {
+    return;
+  }
+
+  if ((apsFrame->profileId == SL_ZIGBEE_ZDO_PROFILE_ID)
+      && (apsFrame->destinationEndpoint == SL_ZIGBEE_ZDO_ENDPOINT)) {
+    rx_zdo_rx_handler(sender, apsFrame, message, messageLength);
+  } else {
+    rx_zcl_handler_on_rx(sender, apsFrame, message, messageLength);
+  }
 }
 
 /** @brief Complete network steering.

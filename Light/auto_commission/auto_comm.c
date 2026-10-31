@@ -15,6 +15,8 @@
 #include "light_on_off.h"
 
 #include "sl_zigbee_debug_print.h"
+#include "occ_sensor.h"     // needed by nwk_multicast.h
+#include "nwk_multicast.h"
 
 extern sl_zigbee_af_status_t manually_add_group(uint16_t new_group);
 
@@ -371,3 +373,45 @@ bool auto_commission_incoming_cmd(sl_zigbee_af_cluster_command_t *cmd)
   return(return_status);
 }
 
+
+/***********************  LOCAL AUTO COMMISSION  *********************/
+// Selected with the buttons, see Light/buttons/button_actions.c
+
+// Output auto commish announce cmd 3 times at 3 seconds apart
+static void bx_auto_announce_task(taskParm_t parm0, taskParm_t parm1)
+{
+  if(has_timed_out(parm0.u32, 3000UL))
+  {
+     parm1.u8++;
+     if(3 >= parm1.u8)
+     {
+        taskParm_t arg0, arg1;
+
+        arg0.u32 = get_time_ms();
+        arg1.u8 = parm1.u8;
+        addTask(bx_auto_announce_task, arg0, arg1);
+
+        broadcast_autocommission_announce();
+     }
+     else
+     {
+        // Done
+        removeTask(bx_auto_announce_task);
+     }
+  }
+}
+
+void start_local_auto_commission(void)
+{
+  taskParm_t arg0, arg1;
+
+  // Make sure this light is in manual add mode
+  if(!is_app_flags_nonvol_set(B_MANUAL_ADD_MODE))
+  {
+     place_in_manual_add_into_group_mode();
+  }
+  arg0.u32 = get_time_ms();
+  arg1.u8 = 0;    // Counter
+  addTask(bx_auto_announce_task, arg0, arg1);
+
+}

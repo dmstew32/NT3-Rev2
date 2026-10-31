@@ -13,3 +13,6 @@ cmake_gcc/
 *.project.mak
 config/zcl/slc_args.json
 autogen/sbom/
+# host test build output
+test/buttons/build/
+test/unit/build/
