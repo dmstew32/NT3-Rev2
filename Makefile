@@ -6,7 +6,8 @@
 #                 more than one adapter connected:  make flash SERIALNO=440322302
 #   make ota      create the .gbl and .ota upgrade files (like scripts/postbuild.cmd);
 #                 the firmware version is read from NT_3_app.h
-#   make test     PC test of the button code (test/buttons; needs gcc and python)
+#   make test     PC tests: button equivalence test (test/buttons) and unit tests
+#                 (test/unit); needs MSYS2 MinGW gcc, python and CMake
 #
 # Run it with make.cmd, which uses the make, shell and compiler that come with
 # Simplicity Studio:   make build  (cmd)    .\make build  (PowerShell)
@@ -59,8 +60,15 @@ ota:
 	"$(COMMANDER)" ota create --upgrade-image "$(IMAGE).gbl" --manufacturer-id $(MFG_ID) \
 		--image-type $(IMAGE_TYPE) --firmware-version $(APP_VERSION) --string "rel" -o "$(IMAGE).ota"
 
+# Unit tests: CMake + GoogleTest with the MSYS2 MinGW gcc.  CMAKE_SH: the
+# "MinGW Makefiles" generator otherwise refuses to run with Studio's sh.exe on PATH.
+UNIT_BUILD = test/unit/build
+
 test:
 	$(MAKE) -C test/buttons
+	cmake -S test/unit -B $(UNIT_BUILD) -G "MinGW Makefiles" -DCMAKE_SH=CMAKE_SH-NOTFOUND --no-warn-unused-cli
+	cmake --build $(UNIT_BUILD) -j $(JOBS)
+	ctest --test-dir $(UNIT_BUILD) --output-on-failure
 
 check-build-dir:
 	@test -f "$(BUILD_DIR)/makefile" || { echo "No '$(BUILD_DIR)/makefile' - build the project once in Simplicity Studio"; exit 1; }
