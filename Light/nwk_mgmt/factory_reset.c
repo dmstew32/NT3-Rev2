@@ -6,7 +6,6 @@
 #include "factory_reset.h"
 #include "hal_leds.h"
 #include "hal_utils.h"
-#include "hal_buttons.h"
 #include "em_chip.h"
 #include "hal_pwm.h"
 #include "sl_event_handler.h"

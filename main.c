@@ -51,6 +51,7 @@ int nodeMain(void)
 #include "hal_pwm.h"
 #include "hal_utils.h"
 #include "hal_buttons.h"
+#include "button_actions.h"
 
 #include "hal_light_sensor.h"
 #include "light_sensor.h"
@@ -95,6 +96,7 @@ void app_init(void)
   hal_test_pts_init();
   hal_timer1_init();
   hal_buttons_init();
+  button_actions_on_startup();
   hal_watchdog_init(false);
   occ_sensor_init();
   light_sensor_init();

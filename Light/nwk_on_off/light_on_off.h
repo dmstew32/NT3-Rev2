@@ -39,4 +39,8 @@ void clear_on_from_switch(void);
 
 bool app_init_done(void);
 
+// Button modes (Light/buttons/button_actions.c)
+void toggle_50_percent_mode(void);
+void toggle_em_mode(void);
+
 #endif /* NWK_LIGHT_ON_OFF_H_ */
