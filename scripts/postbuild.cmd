@@ -2,7 +2,7 @@ set IMB_EXE="image-builder-windows.exe"
 set COMMANDER_EXE="C:\SiliconLabs\SimplicityStudio\v5\developer\adapter_packs\commander\commander.exe"
 
 :: Set the configuration values
-set APP_VERSION=0x00010103
+set APP_VERSION=0x00090104
 set MFG_ID=0x1574
 set IMAGE_TYPE=0x0002
 
