@@ -8,8 +8,13 @@
 #ifndef HAL_HAL_LEDS_H_
 #define HAL_HAL_LEDS_H_
 
+/*
+ * Red and green LED driver: pins, on/off, flashing.
+ * What the LEDs mean is in Light/leds/app_leds.h; use that instead.
+ */
 
-#define LED_FLASH_TIME    (250UL)   /* Used for 1 time flash nwk status etc */
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef struct
 {
@@ -25,6 +30,9 @@ void hal_set_green_led(uint8_t on);
 
 void hal_toggle_red_led(void);
 void hal_toggle_green_led(void);
+
+// Both LEDs off (red, then green).  Safe in interrupt context.
+void hal_leds_off(void);
 
 bool hal_start_flashing_red_led(uint32_t n_flashes, uint32_t led_on_time_ms, uint32_t led_off_time_ms);
 void hal_stop_flashing_red_led(void);

@@ -15,6 +15,7 @@
 #include "adaptiv_config.h"
 #include "auto_comm.h"
 #include "app_button.h"
+#include "app_leds.h"
 #include "button_actions.h"
 #include "fw_version_display.h"
 
@@ -58,10 +59,6 @@
 #define COLOR_STEP_K               (500)
 #define COLOR_MIN_K                (3000)
 #define COLOR_MAX_K                (5000)
-
-// Blinks: show # of presses on success, one long blink on failure
-#define show_presses(n_)   hal_start_flashing_red_led((uint32_t)(n_), 250UL, 250UL)
-#define show_fail()        hal_start_flashing_red_led(1UL, 1500UL, 50UL)
 
 
 /**********************  OCC SENSOR DELAYS  (D presses)  *******************/
@@ -165,7 +162,7 @@ static void set_occ_delays(uint8_t presses)
   if(NULL == p_setting)
   {
      sl_zigbee_core_debug_println("Occ button press %d", presses);
-     show_fail();
+     app_leds_show_fail();
      return;
   }
 
@@ -181,7 +178,7 @@ static void set_occ_delays(uint8_t presses)
 
   // Send to every one in the group
   tx_occ_sensor_new_delays(get_unoccupied_delay(), get_unoccupied_delay_to_off());
-  show_presses(presses);
+  app_leds_show_presses(presses);
 }
 
 static void set_light_levels(uint8_t presses_t, uint8_t presses_d)
@@ -200,7 +197,7 @@ static void set_light_levels(uint8_t presses_t, uint8_t presses_d)
   if(NULL == p_levels)
   {
      // Show fail
-     show_fail();
+     app_leds_show_fail();
      sl_zigbee_app_debug_println("Button FAIL: [0]:%d [1]:%d   <%d>", presses_t,
                                  presses_d, get_time_ms());
      return;
@@ -213,7 +210,7 @@ static void set_light_levels(uint8_t presses_t, uint8_t presses_d)
   // Send to every one in the group
   tx_new_light_levels();
   // Show # of presses
-  show_presses(presses_t);
+  app_leds_show_presses(presses_t);
 }
 
 // A press sequence finished: decide what the presses mean.
@@ -228,13 +225,13 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   /***********************     50% MODE    *********************/
   else if((N_BUT0_PRESSES_FOR_50_PERCENT == presses_t) && (N_BUT1_PRESSES_FOR_50_PERCENT == presses_d))
   {
-     show_presses(presses_d);
+     app_leds_show_presses(presses_d);
      toggle_50_percent_mode();
   }
   /***********************      EM MODE    *********************/
   else if((N_BUT0_PRESSES_FOR_EM_MODE == presses_t) && (N_BUT1_PRESSES_FOR_EM_MODE == presses_d))
   {
-     show_presses(presses_d);
+     app_leds_show_presses(presses_d);
      toggle_em_mode();
   }
   /***********************   DO TWITCH's JOB  *********************/
@@ -242,12 +239,12 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   {
      if(adaptiv_not_in_group())
      {
-        show_presses(presses_d);
+        app_leds_show_presses(presses_d);
         start_local_auto_commission();
      }
      else
      {
-        show_fail();
+        app_leds_show_fail();
      }
   }
   #ifdef ALLOW_DISPLAY_VERSION
@@ -261,7 +258,7 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   else if(!are_buttons_allowed())
   {
      // Show fail
-     show_fail();
+     app_leds_show_fail();
   }
   /**********************  OCC SENSOR DELAYS *******************/
   else if((MAX_BUT0_PRESSES_FOR_OCC_DELAY == presses_t) &&   // BUTTON 0 also known as T
@@ -281,7 +278,7 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   else
   {
      // Error no valid presses
-     show_fail();
+     app_leds_show_fail();
   }
 }
 
@@ -322,7 +319,7 @@ static void on_hold_dim(app_button_t gesture)
   {
      move_to_level_onoff(get_max_light_level(), 0);
   }
-  hal_start_flashing_red_led(1UL, 500UL, 50UL);
+  app_leds_show_dim_step();
 }
 
 /***            MANUAL ADD TO GROUP              ***/

@@ -76,6 +76,12 @@ void hal_set_green_led(uint8_t on)
   }
 }
 
+void hal_leds_off(void)
+{
+  hal_set_red_led(0);
+  hal_set_green_led(0);
+}
+
 void hal_toggle_red_led(void)
 {
   GPIO_PinOutToggle(RED_LED_PORT, RED_LED_PIN);
@@ -195,25 +201,3 @@ void hal_stop_flashing_green_led(void)
   #endif
 }
 
-
-
-#if 0
-void hal_start_flashing_railroad_leds(uint32_t duration_ms, uint32_t led_on_ms, uint8_t final_led_state_on_off)
-{
-  hal_set_red_led(1);
-  hal_set_green_led(0);
-
-  //hal_start_flashing_red_led(duration_ms, led_on_ms, final_led_state_on_off);
-  hal_start_flashing_red_led(10, led_on_ms, led_on_ms);
-
-  hal_start_flashing_green_led(duration_ms, led_on_ms, final_led_state_on_off);
-
-  //sl_zigbee_app_debug_println("hal_start_flashing_railroad_leds");
-}
-void hal_stop_flashing_railroad_leds(void)
-{
-  hal_stop_flashing_red_led();
-  hal_stop_flashing_green_led();
-  //sl_zigbee_app_debug_println("hal_stop_flashing_railroad_leds");
-}
-#endif

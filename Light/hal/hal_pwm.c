@@ -480,7 +480,6 @@ void hal_stop_pwm2_ramp(void)
 
 #ifdef PWM_UNIT_TEST
 #define DURATION (20000UL)
-#if 1
 void pwm_self_test(void)
 {
   static bool ramp_up = true;
@@ -506,56 +505,6 @@ void pwm_self_test(void)
 }
 
 
-#else
-void pwm_self_test(void)
-{
-  static uint8_t active_pwm = 1;
-  uint8_t level[2] = {0, 254};
-
-  // Wait till open.  Only do 1 pwm at a time
-  if(pwm1.active || pwm2.active)
-  {
-    return;
-  }
-  hal_stop_flashing_green_led();
-  hal_stop_flashing_red_led();
-
-  // Select next pwm to test
-  //active_pwm = (2 == active_pwm) ? 1 : 2;
-
-  // Both pwm's done
-  if(1 == active_pwm)
-  {
-     if(128 < hal_get_present_pwm1_value())
-     {
-        hal_start_pwm1_ramp(level[1], level[0], DURATION);
-        hal_start_flashing_red_led2UL, 250UL, 250UL);
-     }
-     else
-     {
-        hal_start_pwm1_ramp(level[0], level[1], DURATION);
-        hal_start_flashing_green_led(DURATION+250UL, 250UL, 0);
-     }
-  }
-  else if(2 == active_pwm)
-  {
-     if(128 < hal_get_present_pwm2_value())
-     {
-        hal_start_pwm2_ramp(level[1], level[0], DURATION);
-        hal_start_flashing_red_led(DURATION+250UL, 250UL, 0);
-     }
-     else
-     {
-        hal_start_pwm2_ramp(level[0], level[1], DURATION);
-        hal_start_flashing_green_led(DURATION+250UL, 250UL, 0);
-     }
-  }
-  else
-  {
-     // ????
-  }
-}
-#endif
 #else // PWM_UNIT_TEST
 void pwm_self_test(void) {}
 

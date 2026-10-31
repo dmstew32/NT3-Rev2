@@ -15,9 +15,11 @@ SEEDS    ?= 300
 GESTURES ?= 40
 
 NEW_SRC  = $(ROOT)/Light/hal/hal_buttons.c $(ROOT)/Light/buttons/app_button.c \
-           $(ROOT)/Light/buttons/button_actions.c $(ROOT)/Light/buttons/fw_version_display.c
+           $(ROOT)/Light/buttons/button_actions.c $(ROOT)/Light/buttons/fw_version_display.c \
+           $(ROOT)/Light/leds/app_leds.c
 NEW_HDR  = $(ROOT)/Light/hal/hal_buttons.h $(ROOT)/Light/buttons/app_button.h \
-           $(ROOT)/Light/buttons/button_actions.h $(ROOT)/Light/buttons/fw_version_display.h
+           $(ROOT)/Light/buttons/button_actions.h $(ROOT)/Light/buttons/fw_version_display.h \
+           $(ROOT)/Light/leds/app_leds.h
 FEATURES = $(ROOT)/Light/nwk_on_off/light_on_off.c:toggle_50_percent_mode,toggle_em_mode \
            $(ROOT)/Light/auto_commission/auto_comm.c:bx_auto_announce_task,start_local_auto_commission
 

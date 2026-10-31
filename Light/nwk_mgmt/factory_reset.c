@@ -5,6 +5,7 @@
 #include "RehTOS.h"
 #include "factory_reset.h"
 #include "hal_leds.h"
+#include "app_leds.h"
 #include "hal_utils.h"
 #include "em_chip.h"
 #include "hal_pwm.h"
@@ -42,7 +43,7 @@ static void factory_reset_handler(sl_zigbee_af_event_t *event)
   switch(factory_reset_state)
   {
      case 0:
-        hal_set_red_led(1);
+        app_leds_factory_reset(true);
         // Stay in this state till not on a nwk
         if(SL_ZIGBEE_JOINED_NETWORK == nwk_status)
         {
@@ -196,11 +197,11 @@ static void factory_reset_handler(sl_zigbee_af_event_t *event)
            CHIP_Reset();
         }
         factory_reset_state++;
-        hal_set_red_led(0);
+        app_leds_factory_reset(false);
         break;
 
      default:
-        hal_set_red_led(0);
+        app_leds_factory_reset(false);
         factory_reset_state = 0;
         factory_reset_cmd = false;
         sl_zigbee_af_event_set_inactive(&factory_reset_event);

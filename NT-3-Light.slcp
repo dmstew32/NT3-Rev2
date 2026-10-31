@@ -50,6 +50,7 @@ source:
 - {path: Light/buttons/app_button.c}
 - {path: Light/buttons/button_actions.c}
 - {path: Light/buttons/fw_version_display.c}
+- {path: Light/leds/app_leds.c}
 tag: [prebuilt_demo]
 sdk: {id: simplicity_sdk, version: 2025.6.3}
 include:
@@ -115,6 +116,9 @@ include:
   - {path: app_button.h}
   - {path: button_actions.h}
   - {path: fw_version_display.h}
+- path: Light/leds
+  file_list:
+  - {path: app_leds.h}
 toolchain_settings:
 - {option: gcc_compiler_option, value: '-include NT_3_app.h'}
 component:

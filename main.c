@@ -48,6 +48,7 @@ int nodeMain(void)
 #include "af.h"
 #include "RehTOS.h"
 #include "hal_leds.h"
+#include "app_leds.h"
 #include "hal_pwm.h"
 #include "hal_utils.h"
 #include "hal_buttons.h"
@@ -89,9 +90,7 @@ void app_init(void)
 {
   initTasker();
   sl_zigbee_app_debug_println("App init {");
-  hal_leds_init();
-  hal_set_green_led(1);
-  hal_set_red_led(1);
+  app_leds_on_startup();
   hal_pwm_init();
   hal_test_pts_init();
   hal_timer1_init();
@@ -120,8 +119,7 @@ void app_init(void)
   addTask(on_off_count_task, arg0, arg1 );
 
   //spew_app_info();
-  hal_set_green_led(0);
-  hal_set_red_led(0);
+  app_leds_on_startup_done();
 
   // No sleep
   sl_power_manager_add_em_requirement(SL_POWER_MANAGER_EM0);

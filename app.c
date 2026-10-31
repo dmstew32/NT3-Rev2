@@ -49,6 +49,7 @@
 #include "nwk_commission.h"
 #include "adaptiv_config.h"
 #include "light_on_off.h"
+#include "app_leds.h"
 #include "rx_zcl_handler.h"
 #include "rx_zdo_handler.h"
 #include "tx_queue.h"
@@ -67,9 +68,6 @@
 #define led_toggle(led)
 #endif // SL_CATALOG_LED0_PRESENT
 
-#define LED_ON_TIME                500UL
-#define LED_OFF_TIME               500UL
-#define LED_CHECK_PERIOD_MS        (5000UL + LED_ON_TIME + LED_OFF_TIME)
 
 #define ATTEMPT_TO_JOIN_PERIOD_MS  (10UL*1000UL)    // 10 secs
 #define ATTEMPT_TO_JOIN_LONG_MS    (120UL*60UL*1000UL)  // 2 hrs
@@ -90,7 +88,6 @@
 static sl_zigbee_af_event_t commissioning_event;
 static sl_zigbee_af_event_t which_nwk_we_on_event;
 static sl_zigbee_af_event_t finding_and_binding_event;
-static sl_zigbee_af_event_t red_led_event;
 
 static void spew_nwkParams(sl_zigbee_network_parameters_t *nwkParams);
 
@@ -267,53 +264,6 @@ static void finding_and_binding_event_handler(sl_zigbee_af_event_t *event)
   }
 }
 
-// Long 2 sec at por if not joined
-// 1 quick if joined but not grouped
-// 2 quick if not joined
-static void red_led_event_handler(sl_zigbee_af_event_t *event)
-{
-  static bool por_not_joined_red_led_done = false;  // Reset only at por
-  sl_zigbee_network_status_t nwk_status = sl_zigbee_af_network_state();
-
-  (void)event;
-  if((SL_ZIGBEE_JOINED_NETWORK == nwk_status) && device_is_in_a_group())
-  {
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, 2UL*LED_CHECK_PERIOD_MS);
-     if(is_red_led_free())
-     {
-        hal_set_red_led(0);
-     }
-  }
-  else if((SL_ZIGBEE_JOINED_NETWORK == nwk_status) && !device_is_in_a_group())
-  {
-     if(is_red_led_free())
-     {
-        // Joined, not grouped, 2 blinks
-        hal_start_flashing_red_led(2UL, LED_ON_TIME, LED_OFF_TIME);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS);
-  }
-  else if(por_not_joined_red_led_done)
-  {
-     if(is_red_led_free())
-     {
-        // Not joined and initial long por red led happened, 1 blink
-        hal_start_flashing_red_led(1UL, LED_ON_TIME, LED_OFF_TIME);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS);
-  }
-  else
-  {
-     // Not joined and initial long por red led not happened
-     por_not_joined_red_led_done = true;
-     if(is_red_led_free())
-     {
-        hal_start_flashing_red_led(1UL, 2000UL, 5UL);
-     }
-     sl_zigbee_af_event_set_delay_ms(&red_led_event, LED_CHECK_PERIOD_MS + 2000UL);
-  }
-}
-
 // This is called from sl_zigbee_af_stack_status_cb() when we get on a nwk,
 // so to get ieee number.  Also called if no ota comms after tbd time.
 void which_nwk_we_on_handler(void)
@@ -425,8 +375,7 @@ void sl_zigbee_af_main_init_cb(void)
   // Init only here, activated when up/joined
   sl_zigbee_af_event_init(&which_nwk_we_on_event, which_nwk_we_on_handler);
 #endif
-  sl_zigbee_af_event_init(&red_led_event, red_led_event_handler);
-  sl_zigbee_af_event_set_delay_ms(&red_led_event, 750UL);
+  app_leds_network_status_start();
 
   // tx / rx management modules (Light/tx, Light/rx)
   rx_zcl_handler_on_startup();

@@ -15,7 +15,6 @@
 #define SH_OCC_ARRAY   (4)     /* Divide */
 #define M_OCC_ARRAY    (0x0F)  /* Mask for index */
 
-#define OCC_LED_DELAY  (1250UL) /* Time, mS, LED stays on with no motion */
 
 #define OCC_BAD_LEVEL_LOW    (0x01FF)
 #define OCC_BAD_LEVEL_HIGH   (0x3E01)

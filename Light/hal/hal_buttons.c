@@ -79,8 +79,7 @@ static void buttons_done_isr(void)
      button[0].time_stamp = button[0].time_stamp_isr;
      button[1].time_stamp = button[1].time_stamp_isr;
 
-     hal_set_red_led(0);     // Make sure they're off
-     hal_set_green_led(0);
+     hal_leds_off();     // Make sure they're off
 
      button[0].active = false;
      button[1].active = false;

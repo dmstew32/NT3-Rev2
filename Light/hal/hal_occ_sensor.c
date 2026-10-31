@@ -8,6 +8,7 @@
 #include "RehTOS.h"
 #include "hal_utils.h"
 #include "hal_leds.h"
+#include "app_leds.h"
 #include "hal_occ_sensor.h"
 #include "occ_sensor.h"
 #include "adaptiv_config.h"
@@ -186,7 +187,6 @@ static void hal_occ_sensor_read_isr(void)
  */
 static void occ_sensor_handler(sl_zigbee_af_event_t *event)
 {
-  static uint32_t occ_led_timeStamp = 0UL;
   uint8_t index = occ_info.index;
   uint32_t sum = 0;
 
@@ -231,18 +231,7 @@ static void occ_sensor_handler(sl_zigbee_af_event_t *event)
      occ_info.index &= M_OCC_ARRAY;
 
      // LED behavior
-     if(occ_info.b_occ_detected)
-     {
-        hal_set_green_led(1);
-        occ_led_timeStamp = get_time_ms();
-     }
-     else if(has_timed_out(occ_led_timeStamp, OCC_LED_DELAY))
-     {
-        hal_set_green_led(0);
-     }
-     else
-     {
-     }
+     app_leds_on_occupancy_sample(occ_info.b_occ_detected);
 
   }
   else
@@ -250,7 +239,7 @@ static void occ_sensor_handler(sl_zigbee_af_event_t *event)
      // Bad sensor
      occ_info.b_occ_detected = false;
      occ_info.b_bad_occ_sensor = true;
-     hal_toggle_green_led();
+     app_leds_on_bad_occ_sensor();
   }
 
   occ_sensor_logic((bool)occ_info.b_occ_detected);
@@ -302,7 +291,7 @@ void hal_stop_occ_sensor(void)
   occ_info.b_occ_detected = false;
   occ_info.b_last_occ_detected = false;
   occ_info.b_force_occ_event = false;
-  hal_set_green_led(0);
+  app_leds_on_occ_sensor_stopped();
   write_occupancy_sensor_attribute(ZCL_OCCUPANCY_ATTRIBUTE_ID,
                                               (uint8_t *)&data);
   sl_zigbee_app_debug_println("Occ Sensor OFF");
