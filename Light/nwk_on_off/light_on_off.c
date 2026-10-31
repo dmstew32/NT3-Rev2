@@ -17,6 +17,7 @@
 
 #include "sl_zigbee_debug_print.h"
 #include "hal_buttons.h"
+#include "light_levels.h"
 
 static uint8_t _max_light_level = DEFAULT_MAX_LIGHT_LEVEL;
 static uint8_t _mid_light_level = DEFAULT_MID_LIGHT_LEVEL;
@@ -115,7 +116,7 @@ static void set_light_to_max_level_task(taskParm_t parm0, taskParm_t parm1)
   if(has_timed_out(parm0.u32, parm1.u32) && !are_lights_dimming_up_dowm())
   {
      removeTask(set_light_to_max_level_task);
-     move_to_level_onoff(get_max_light_level(), 0);
+     move_to_level_onoff(light_level_ceiling(), 0);
   }
 }
 // New requirement, 6/21/26
@@ -128,8 +129,32 @@ static void start_task_move_to_max_level(void)
   addTask(set_light_to_max_level_task, arg0, arg1);
 }
 
+static bool levels_are_mapped(void)
+{
+  return(eDAINTREE_NWK == get_present_network());
+}
+
+uint8_t light_level_ceiling(void)
+{
+  return(levels_are_mapped() ? LIGHT_LEVEL_ZIGBEE_MAX : get_max_light_level());
+}
+
+uint8_t light_output_for_level(uint8_t level)
+{
+  if(levels_are_mapped())
+  {
+     return(light_level_map(level, _min_light_level, _max_light_level));
+  }
+  return((level > _max_light_level) ? _max_light_level : level);
+}
+
+// Daintree: min/max map the level (light_output_for_level()), they never move it
 static void adjust_light_level_for_new_min_limit(uint8_t new_min_limit)
 {
+  if(levels_are_mapped())
+  {
+     return;
+  }
   if(get_present_light_level() < new_min_limit)
   {
      move_to_level_onoff(new_min_limit, 0);
@@ -148,6 +173,10 @@ static void adjust_light_level_for_new_mid_limit(uint8_t new_mid_limit)
 }
 static void adjust_light_level_for_new_max_limit(uint8_t new_max_limit)
 {
+  if(levels_are_mapped())
+  {
+     return;
+  }
   if(get_present_light_level() > new_max_limit)
   {
      move_to_level_onoff(new_max_limit, 0);
@@ -157,10 +186,8 @@ static void adjust_light_level_for_new_max_limit(uint8_t new_max_limit)
 // Called from both the Adaptiv & Daintree write attribute cmd, and from
 // button presses on this light.   Will non-vol save & init in both Adaptive &
 // Daintree's attributes
-void save_min_light_level(uint8_t new_min_level)
+static void store_min_light_level(uint8_t new_min_level)
 {
-  adjust_light_level_for_new_min_limit(new_min_level);
-
   // Save local variable and write novol
   _min_light_level = new_min_level;
   sl_token_set_data(TOKEN_APP_LIGHT_LEVEL_MIN, 0, &_min_light_level, 1);
@@ -170,6 +197,12 @@ void save_min_light_level(uint8_t new_min_level)
      sl_zigbee_app_debug_println("MIN level nvm = %d", _min_light_level);
   }
   init_min_max_silab_levels();
+}
+
+void save_min_light_level(uint8_t new_min_level)
+{
+  adjust_light_level_for_new_min_limit(new_min_level);
+  store_min_light_level(new_min_level);
 }
 
 // Save and init only Adaptiv attribute
@@ -190,10 +223,8 @@ void save_mid_light_level(uint8_t new_mid_level)
 // Called from both the Adaptiv & Daintree write attribute cmd, and from
 // button presses on this light.   Will non-vol save & init in both Adaptive &
 // Daintree's attributes
-void save_max_light_level(uint8_t new_max_level)
+static void store_max_light_level(uint8_t new_max_level)
 {
-  adjust_light_level_for_new_max_limit(new_max_level);
-
   // Save local variable and write novol
   _max_light_level = new_max_level;
   sl_token_set_data(TOKEN_APP_LIGHT_LEVEL_MAX, 0, &_max_light_level, 1);
@@ -203,6 +234,12 @@ void save_max_light_level(uint8_t new_max_level)
      sl_zigbee_app_debug_println("MAX level nvm = %d", _max_light_level);
   }
   init_min_max_silab_levels();
+}
+
+void save_max_light_level(uint8_t new_max_level)
+{
+  adjust_light_level_for_new_max_limit(new_max_level);
+  store_max_light_level(new_max_level);
 
   // If new max level, go there
   start_task_move_to_max_level();
@@ -406,34 +443,15 @@ static bool parse_daintree_attribute(uint16_t attr, uint8_t data)
 
   switch(attr)
   {
+     // Stored exactly as written.  The light is only changed by on/off and
+     // level commands; the new min/max map the next one onto the light output.
      case ZCL_MIN_LIGHT_LEVEL_ATTRIBUTE_ID:
-        // We're guessing here cause we don't know what daintree is doing
-        if(DEFAULT_MIN_LIGHT_LEVEL_DT > data)
-        {
-           data = DEFAULT_MIN_LIGHT_LEVEL_DT;
-        }
-
-        if(data > get_present_light_level())
-        {
-           move_to_level_onoff(data, 0);
-        }
-
-        save_min_light_level(data);
+        store_min_light_level(data);
         break;
      case ZCL_MAX_LIGHT_LEVEL_ATTRIBUTE_ID:
-        if(data < get_present_light_level())
-        {
-           move_to_level_onoff(data, 0);
-        }
-
-        save_max_light_level(data);
+        store_max_light_level(data);
         break;
      case ZCL_ALLOW_OFF_ATTRIBUTE_ID:
-        if((0 == data) && (0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID)))
-        {
-            move_to_level_onoff(get_max_light_level(), 0);
-        }
-
         save_allow_light_off(data);
         break;
      default:

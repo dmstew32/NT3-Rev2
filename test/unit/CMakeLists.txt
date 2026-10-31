@@ -73,3 +73,6 @@ nt3_test(test_hal_light_sensor test_hal_light_sensor.cpp ${LIGHT}/hal/hal_light_
 nt3_test(test_occ_group test_occ_group.cpp ${LIGHT}/occupancy/occ_group.c)
 nt3_test(test_occ_sensor test_occ_sensor.cpp ${LIGHT}/nwk_sensors/occ_sensor.c ${LIGHT}/occupancy/occ_group.c
                          ${LIGHT}/nwk_config/nwk_multicast.c)
+
+# light levels
+nt3_test(test_light_levels test_light_levels.cpp ${LIGHT}/utils/light_levels.c)

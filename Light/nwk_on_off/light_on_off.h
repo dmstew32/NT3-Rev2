@@ -27,6 +27,12 @@ uint8_t get_mid_light_level(void);
 uint8_t get_max_light_level(void);
 bool allow_light_off(void);
 
+// Zigbee level -> light output.  Daintree: mapped onto min..max (light_levels.h),
+// others: the level, limited to max.
+uint8_t light_output_for_level(uint8_t level);
+// Highest Zigbee level ("full on"): Daintree 254 (= its max), others the max level
+uint8_t light_level_ceiling(void);
+
 bool tx_new_light_levels(void);
 
 void fat_finger(void);

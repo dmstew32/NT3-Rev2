@@ -549,14 +549,16 @@ bool write_light_level_attribute(sl_zigbee_af_attribute_id_t attributeID, uint8_
 uint8_t save_present_light_level_to_on_level_attribute(void)
 {
   uint8_t present_level = hal_get_dim_pwm_255();
+  // Daintree: Zigbee levels 1..254 (the mapping applies min/max)
+  uint8_t lowest = (eDAINTREE_NWK == get_present_network()) ? 1 : DEFAULT_MIN_LIGHT_LEVEL_DT;
 
-  if(get_max_light_level() < present_level)
+  if(light_level_ceiling() < present_level)
   {
-     present_level = get_max_light_level();
+     present_level = light_level_ceiling();
   }
-  else if(DEFAULT_MIN_LIGHT_LEVEL_DT > present_level)
+  else if(lowest > present_level)
   {
-     present_level = DEFAULT_MIN_LIGHT_LEVEL_DT;
+     present_level = lowest;
   }
   else
   {
