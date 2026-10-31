@@ -41,6 +41,7 @@
 static uint8_t _min_level = DEFAULT_MIN_LIGHT_LEVEL_DT;
 static uint8_t _min_level_on_off = (DEFAULT_MIN_LIGHT_LEVEL_DT-1);
 static bool dimming_button_active = false;
+static bool level_cmd_from_network = false;   // the running level command came from a switch / gateway
 
 #define MIN_LEVEL _min_level
 #define MIN_LEVEL_ON_OFF _min_level_on_off
@@ -92,6 +93,16 @@ static bool dimming_button_active = false;
 #include "light_sensor.h"
 
 extern void suspend_all_sensors(uint16_t Dsecs);
+
+// A level command from the network (switch) finished or was stopped: occupancy wakes to this level
+static void note_switch_level(void)
+{
+  if(level_cmd_from_network)
+  {
+     level_cmd_from_network = false;
+     occ_sensor_set_switch_level(hal_get_dim_pwm_255());
+  }
+}
 #endif // ADAPTIV_LIGHT
 
 #ifdef ZCL_USING_LEVEL_CONTROL_CLUSTER_START_UP_CURRENT_LEVEL_ATTRIBUTE
@@ -300,6 +311,7 @@ void sl_zigbee_af_level_control_cluster_server_tick_cb(uint8_t endpoint)
 
     // Save present level
     save_present_light_level_to_on_level_attribute();
+    note_switch_level();
 
 #endif // ADAPTIV_LIGHT
     if (state->commandId == ZCL_MOVE_TO_LEVEL_WITH_ON_OFF_COMMAND_ID
@@ -528,6 +540,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_to_lev
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("\n%sMOVE_TO_LEVEL lvl:%d t:%d %02X %02X   <%d>",
                                              "RX level-control:",
@@ -564,6 +579,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_to_lev
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("\n%sMOVE_TO_LEVEL_WITH_ON_OFF lvl:%d t:%d   <%d>",
                                              "RX level-control:",
@@ -596,6 +614,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_cb(sl_
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sMOVE %02X %02X   <%d>",
                                              "RX level-control:",
@@ -623,6 +644,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_with_o
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sMOVE_WITH_ON_OFF %02X %02X   <%d>",
                                              "RX level-control:",
@@ -649,6 +673,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_step_cb(sl_
       != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
+#ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
 #ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sSTEP Mode:%s size:%d t:%d   <%d>",
@@ -684,6 +711,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_step_with_o
       != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
+#ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
 #ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sSTEP_WITH_ON_OFF %s size:%d t:%d   <%d>",
@@ -832,6 +862,7 @@ static void moveToLevelHandler(uint8_t commandId,
 
       // Save present level
       save_present_light_level_to_on_level_attribute();
+      note_switch_level();
 #endif // ADAPTIV_LIGHT
       goto send_default_response;
     }
@@ -1233,6 +1264,7 @@ static void stopHandler(uint8_t commandId,
   status = SL_ZIGBEE_ZCL_STATUS_SUCCESS;
 #ifdef ADAPTIV_LIGHT
   save_present_light_level_to_on_level_attribute();
+  note_switch_level();
 #endif // ADAPTIV_LIGHT
 
   send_default_response:
@@ -1620,6 +1652,7 @@ void move_to_level_onoff(uint8_t level, uint16_t transitionTimeDs)
 
      return;
   }
+  level_cmd_from_network = false;
   // This stops all sensors and forces occupancy sensor to reset to on_unoccupied state
   // Also suspend_light_sensor_control()
   suspend_all_sensors(transitionTimeDs + DSECS_1_SECS);
@@ -1668,6 +1701,7 @@ void move_to_level_dhs(uint8_t level, uint16_t transitionTimeDs)
 
      return;
   }
+  level_cmd_from_network = false;
 
   // Saturate max level
   if(get_max_light_level() < level)

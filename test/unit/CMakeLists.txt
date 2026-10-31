@@ -42,7 +42,7 @@ add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-pointer-to-int-cast>)
 include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/stubs)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}
                     ${LIGHT}/tx ${LIGHT}/rx ${LIGHT}/utils ${LIGHT}/time
-                    ${LIGHT}/buttons ${LIGHT}/leds ${LIGHT}/hal)
+                    ${LIGHT}/buttons ${LIGHT}/leds ${LIGHT}/hal ${LIGHT}/occupancy)
 
 function(nt3_test name)
   add_executable(${name} ${ARGN})
@@ -68,3 +68,8 @@ nt3_test(test_app_leds        test_app_leds.cpp        ${LIGHT}/leds/app_leds.c 
 
 # light sensor
 nt3_test(test_hal_light_sensor test_hal_light_sensor.cpp ${LIGHT}/hal/hal_light_sensor.c)
+
+# occupancy
+nt3_test(test_occ_group test_occ_group.cpp ${LIGHT}/occupancy/occ_group.c)
+nt3_test(test_occ_sensor test_occ_sensor.cpp ${LIGHT}/nwk_sensors/occ_sensor.c ${LIGHT}/occupancy/occ_group.c
+                         ${LIGHT}/nwk_config/nwk_multicast.c)

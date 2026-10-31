@@ -3,20 +3,9 @@
 
 #include "hal_occ_sensor.h"
 
-#define OCC_SENSOR_DIM_TO_OFF_MS  (10000UL)
-#define OCC_SENSOR_FORCE_CHECK_MS (OCC_SENSOR_DIM_TO_OFF_MS + 1000UL)
-
-#define N_OCCUPANCY_SENSOR_TABLE_SIZE  (10)
-
+// Daintree and stand alone / no network.  Adaptiv grouped lights: occ_group.h
 typedef enum
 {
-  eOCCUPIED_OCCUPIED_ON,
-  eOCCUPIED_UNOCCUPIED_ON_WAIT,
-  eUNOCCUPIED_UNOCCUPIED_MID,
-  eUNOCCUPIED_UNOCCUPIED_MID_WAIT,
-  eUNOCCUPIED_UNOCCUPIED_OFF_WAIT,
-  eUNOCCUPIED_UNOCCUPIED_OFF,
-
   eOCCUPIED_OCCUPIED_ON_DT,
   eOCCUPIED_UNOCCUPIED_ON_WAIT_DT,
   eUNOCCUPIED_UNOCCUPIED_OFF_DT,
@@ -26,16 +15,9 @@ typedef enum
   eUNOCCUPIED_UNOCCUPIED_MID_WAIT_NN,
   eUNOCCUPIED_UNOCCUPIED_OFF_NN,
 
-  eOCCUPENCY_SENSOR_NOP,
-  eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE
+  eOCC_SENSOR_ADAPTIV,     // Adaptiv: state is in occ_group
 } occ_sensor_state_t;
 
-typedef struct
-{
-  uint16_t macID;
-  occ_sensor_state_t state;
-  uint8_t present_attr;
-} occ_sensor_table_t;
 typedef struct
 {
   bool present_occupied_value;
@@ -50,13 +32,14 @@ void occ_sensor_init_task(taskParm_t parm0, taskParm_t parm1);
 
 void occ_sensor_logic(bool occupied);
 
-void set_occ_sensor_onOff(bool onOff);
-bool update_occ_sensor_neighbor_table(uint16_t macID, occ_sensor_state_t state, uint8_t attr, bool reset);
 
 uint16_t read_occupancy_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID);
 bool write_occupancy_sensor_attribute( sl_zigbee_af_attribute_id_t attributeID, uint8_t *data);
 
-void set_new_occ_state(sl_zigbee_af_cluster_command_t *cmd);
+// Group occupancy keepalive / level change from another light (Adaptiv)
+void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd);
+// A switch (network level command) left the light at this level: occupancy wakes to it
+void occ_sensor_set_switch_level(uint8_t level);
 
 bool is_occ_mid_or_lower(void);
 void spew_occ_state(void);

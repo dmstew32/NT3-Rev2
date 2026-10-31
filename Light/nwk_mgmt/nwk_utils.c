@@ -306,9 +306,10 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
         }
         case ZCL_OCCUPANCY_SENSING_CLUSTER_ID:
         {
-           if(ZCL_WRITE_OCCUPANCY_SENSOR_COMMAND_ID == cmd->commandId)
+           if((ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID == cmd->commandId) ||
+              (ZCL_OCCUPANCY_SENSOR_LEVEL_CHANGE_COMMAND_ID == cmd->commandId))
            {
-              set_new_occ_state(cmd);
+              occ_sensor_rx_group_cmd(cmd);
               return_status = true;
            }
            break;

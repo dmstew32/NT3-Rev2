@@ -5,6 +5,7 @@
 #include "hal_occ_sensor.h"
 #include "hal_utils.h"
 #include "occ_sensor.h"
+#include "occ_group.h"
 #include "hal_leds.h"
 #include "light_on_off.h"
 
@@ -27,33 +28,27 @@
 
 //#define USE_ZIGBEE_ATTRIBUTE_DELAY
 
+#define OCC_SWITCH_OFF_HOLD_MS  (5UL*60UL*1000UL)   // After an off from a switch, John 3/30
+
 extern sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_off_cb(void);
 
 static uint32_t occ_time_stamp = 0UL;
-static occ_sensor_state_t queue_state = eOCCUPIED_OCCUPIED_ON;
-static uint32_t queue_time;
 
-static uint16_t this_macID = 0;
-static occ_sensor_state_t present_local_state = eOCCUPIED_OCCUPIED_ON;
-static sl_zigbee_af_event_t occ_announce_event;
+static occ_sensor_state_t present_local_state = eOCC_SENSOR_ADAPTIV;
 occupancy_sensor_info_t occupancy_sensor_info = {0};
 static bool allow_occupancy_sensor_control = true;
 static bool occupancy_sensor_initialized = false;
-static volatile uint8_t occupancy_on_light_level = DEFAULT_MAX_LIGHT_LEVEL;
+
+// Adaptiv grouped lights: group occupancy, see occ_group.h
+static occ_group_t occ_group;
+static uint8_t switch_level = DEFAULT_MAX_LIGHT_LEVEL;   // occupancy wakes to the last level set from a switch
+static uint32_t off_time_stamp = 0UL;                    // OFF entered, or last occupancy during a switch-off hold
 
 // Forward declarations
 static void set_occupied_attribute(bool occupied);
-static void set_occ_sensor_local_state(occ_sensor_state_t next_state);
-static void occ_announce_handler(sl_zigbee_af_event_t *event);
 static void (*occ_sensor_state)(void) = NULL;
-
-static void occupied_occupied_on(void);
-static void occupied_unoccupied_on_wait(void);
-static void unoccupied_unoccupied_mid_wait(void);
-static void unoccupied_unoccupied_mid(void);
-static void unoccupied_unoccupied_off(void);
-static void unoccupied_unoccupied_off_wait(void);
-static void unoccupied_unoccupied_off_em_mode(void);
+static void adaptiv_init(void);
+void suspend_occ_sensor_control(uint16_t Dsecs);
 
 static void occupied_occupied_on_dt(void);
 static void occupied_unoccupied_on_wait_dt(void);
@@ -64,7 +59,6 @@ static void occupied_unoccupied_on_wait_nn(void);
 static void unoccupied_unoccupied_mid_wait_nn(void);
 static void unoccupied_unoccupied_off_nn(void);
 
-static void occ_sensor_nop(void);
 static void spew_state(occ_sensor_state_t state, char *state_string);
 
 // Called when nwk changes.  Typically when joined to a new nwk.
@@ -95,12 +89,9 @@ void occ_sensor_init_task(taskParm_t parm0, taskParm_t parm1)
      }
      else if(eADAPTIV_NWK == get_present_network())
      {
-        occ_sensor_state = occupied_occupied_on;
-        present_local_state = eOCCUPIED_OCCUPIED_ON;
-        // NOTE: Since we just joined, have each light set to the same state,
-        // occupied_occupied_on and don't broadcast new state..
-        //sl_zigbee_af_event_set_delay_ms(&occ_announce_event,
-        //                             get_random_number(5000UL, 1000UL));
+        // NOTE: Since we just joined, every light starts ON with a full timer
+        // and nothing is sent
+        adaptiv_init();
         hal_start_occ_sensor();
         set_occupied_attribute(true);
         sl_zigbee_app_debug_println("OCC  occ_sensor_init_task for  eADAPTIV_NWK");
@@ -120,12 +111,12 @@ void occ_sensor_init_task(taskParm_t parm0, taskParm_t parm1)
 // occ_sensor_init_task()
 void occ_sensor_init(void)
 {
-  sl_802154_long_addr_t thisEui64;
   uint16_t unoccupied_delay_secs = 0;
 
   hal_init_occ_sensor();
 
-  sl_zigbee_af_event_init(&occ_announce_event, occ_announce_handler);
+  // Valid before anything can reach it (received keepalives, a later delay change)
+  adaptiv_init();
 
   // Occ sensor active?
   sl_token_get_data(TOKEN_APP_UNOCCUPIED_DELAY, 0, &unoccupied_delay_secs, sizeof(unoccupied_delay_secs));
@@ -136,9 +127,6 @@ void occ_sensor_init(void)
      sl_zigbee_app_debug_println("OCC occ_sensor_init  occ DISABLED");
      return;
   }
-
-  sl_zigbee_af_get_eui64(thisEui64);
-  this_macID = GET_16_FROM_ARRAY(thisEui64, 0);
 
   if((eNO_NWK == get_present_network()) || (eSTAND_ALONE == get_present_network()))
   {
@@ -161,17 +149,12 @@ void occ_sensor_init(void)
   }
   else if(eADAPTIV_NWK == get_present_network())
   {
-     occ_sensor_state = occupied_occupied_on;
-     present_local_state = eOCCUPIED_OCCUPIED_ON;
      suspend_light_sensor_control(DSECS_5_SECS);
      occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
      occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
      occ_time_stamp = get_time_ms();
-     occupancy_on_light_level = get_max_light_level();
-     // NOTE: Since we just powered on, have each light set to the same state,
-     // occupied_occupied_on and don't broadcast new state..
-     //sl_zigbee_af_event_set_delay_ms(&occ_announce_event,
-     //                             get_random_number(5000UL, 1000UL));
+     // NOTE: Since we just powered on, every light starts ON with a full timer
+     // and nothing is sent
      hal_start_occ_sensor();
      set_occupied_attribute(true);
      occupancy_sensor_initialized = true;
@@ -186,161 +169,371 @@ void occ_sensor_init(void)
   }
 }
 
-// Event for multicasts to new occ state
-static void occ_announce_handler(sl_zigbee_af_event_t *event)
+/***********************************************************************************************/
+/********************************    ADAPTIV GROUP OCCUPANCY   *********************************/
+/***********************************************************************************************/
+// The group logic is in occ_group.c.  Here: the light's own actions and the
+// special cases (switch off hold, manual on mode, EM mode, 3 hour on level).
+
+static uint8_t get_wake_level(void)
 {
-  tx_occ_sensor_state(queue_state, queue_time, get_present_light_level());
-}
+  uint8_t level = switch_level;
 
-// Queue with random delay for a multicast to other devices
-// Called from this device, will place this device in nop state and wait for
-// multicast to place it in the new_state.
-// If rx of an occ multicast before this queue is executed, will remove request
-// from the queue, and set_new_occ_state().
-static void delay_tx_occ_sensor_present_state(occ_sensor_state_t present_state)
-{
-  queue_state = present_state;
-  occ_sensor_state = occ_sensor_nop;
-  present_local_state = eOCCUPENCY_SENSOR_NOP;
-
-  occ_time_stamp = get_time_ms();
-
-  sl_zigbee_af_event_set_inactive(&occ_announce_event);
-
-  sl_zigbee_af_event_set_delay_ms(&occ_announce_event, get_random_number(12500UL, 7500UL));  // Average 10 seconds
-
-  #if (OCC_PRINT >= 1)
-  char state_string[36] = {0};
-  spew_state(queue_state, state_string);
-  sl_zigbee_app_debug_println("OCC QUEUE [0x%04X] %s   <%d>", this_macID, state_string, get_time_ms());
-  #endif
-}
-
-// Initialize local variables for next time
-static void set_occ_sensor_local_state(occ_sensor_state_t next_state)
-{
-  present_local_state = next_state;
-
-  switch(next_state)
+  if(get_max_light_level() < level)
   {
-     case eOCCUPIED_OCCUPIED_ON:
-        occ_sensor_state = occupied_occupied_on;
-        if(allow_occupancy_sensor_control)
-        {
-           move_to_level_onoff(get_on_light_level(), DSECS_1_SECS);
-           //move_to_level_onoff(occupancy_on_light_level, DSECS_1_SECS);
-           //move_to_level_onoff(get_max_light_level(), DSECS_1_SECS);
-        }
+     level = get_max_light_level();
+  }
+  if(DEFAULT_MIN_LIGHT_LEVEL_DT > level)
+  {
+     level = DEFAULT_MIN_LIGHT_LEVEL_DT;
+  }
+  return(level);
+}
+
+void occ_sensor_set_switch_level(uint8_t level)
+{
+  // Below the minimum = the switch turned the light off: keep the last on level
+  if(DEFAULT_MIN_LIGHT_LEVEL_DT <= level)
+  {
+     switch_level = level;
+     #if (OCC_PRINT >= 1)
+     sl_zigbee_app_debug_println("OCC switch level %d   <%d>", level, get_time_ms());
+     #endif
+  }
+}
+
+// So that an on command (switch) after dimming restores the wake level, not mid
+static void keep_on_level_at_wake_level(void)
+{
+  uint8_t level = get_wake_level();
+
+  // Reduce constant writes
+  if(read_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID) != level)
+  {
+     write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, &level);
+  }
+}
+
+// Unoccupied long enough: off, unless min level is not 0 or EM mode (stay at mid)
+static bool lights_turn_off(void)
+{
+  return((0 == get_min_light_level()) && !is_app_flags_nonvol_set(B_EM_MODE));
+}
+
+static void enter_off_local(uint32_t now_ms)
+{
+  clear_on_from_switch();
+  off_time_stamp = now_ms;
+}
+
+static uint32_t off_settle_ms(void)
+{
+#ifdef USE_ZIGBEE_ATTRIBUTE_DELAY
+  uint32_t delay = (uint32_t)read_occupancy_sensor_attribute(ZCL_PIR_UNOCCUPIED_TO_OCCUPIED_DELAY_ATTRIBUTE_ID);
+#else
+  uint32_t delay = (uint32_t)DEFAULT_OCC_SENSOR_DELAY_TO_OCC;
+#endif
+  delay *= 1000UL;  // Attribute delay in seconds
+
+  // If delay = 0, give finite time to settle system
+  if(250UL > delay)
+  {
+     delay = 250UL;    // mS
+  }
+  return(delay);
+}
+
+/*****  occ_group actions  *****/
+static uint32_t grp_dim_timeout_ms(void *ctx)
+{
+  (void)ctx;
+  return((uint32_t)get_unoccupied_delay() * 1000UL);
+}
+
+static uint32_t grp_off_timeout_ms(void *ctx)
+{
+  (void)ctx;
+  return((uint32_t)get_unoccupied_delay_to_off() * 1000UL);
+}
+
+static void grp_go_to_state(void *ctx, occ_group_state_t state)
+{
+  (void)ctx;
+  switch(state)
+  {
+     case OCC_GROUP_ON:
+        move_to_level_onoff(get_wake_level(), DSECS_1_SECS);
         occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
         occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
         break;
-     case eOCCUPIED_UNOCCUPIED_ON_WAIT:
-        occ_sensor_state = occupied_unoccupied_on_wait;
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_MID:
-        occ_sensor_state = unoccupied_unoccupied_mid;
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_MID_WAIT:
-        occ_sensor_state = unoccupied_unoccupied_mid_wait;
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF_WAIT:
-        sl_zigbee_af_event_set_inactive(&occ_announce_event);
-        occ_sensor_state = unoccupied_unoccupied_off_wait;
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF:
-        sl_zigbee_af_event_set_inactive(&occ_announce_event);
-        occ_sensor_state = unoccupied_unoccupied_off;
-        break;
-     case eOCCUPENCY_SENSOR_NOP:
-        occ_sensor_state = occ_sensor_nop;
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE:
-        sl_zigbee_af_event_set_inactive(&occ_announce_event);
-        occ_sensor_state = unoccupied_unoccupied_off_em_mode;
+     case OCC_GROUP_MID:
+        set_occupied_attribute(false);
+        keep_on_level_at_wake_level();
+        if(get_present_light_level() > get_mid_light_level())
+        {
+           // move_to_level_onoff() adds extra time to the disable sensors
+           move_to_level_onoff(get_mid_light_level(), DSECS_1_SECS);
+        }
+        // Allow occ event interrupt the dim to mid, and go directly to max
+        suspend_occ_sensor_control(DSECS_0_SECS);
         break;
      default:
-        occ_sensor_state = occupied_occupied_on;
-        suspend_light_sensor_control(DSECS_5_SECS);
-        //move_to_level_onoff(get_on_light_level(), DSECS_TO_ON);
-        occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
-        occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
+        set_occupied_attribute(false);
+        if(lights_turn_off())
+        {
+           // NOTE: suspend_all_sensors() in cb
+           sl_zigbee_af_on_off_cluster_off_cb();
+        }
+        enter_off_local(get_time_ms());
+        // Off cb and em_mode have different sensor disable times, make them the same
+        suspend_occ_sensor_control(DSECS_HALF_SECS);
         break;
   }
-  occ_time_stamp = get_time_ms();
-
   #if (OCC_PRINT >= 1)
-  char state_string[36] = {0};
-  spew_state(next_state, state_string);
-  sl_zigbee_app_debug_println("OCC LOCAL [0x%04X] -> %s   <%d>", this_macID, state_string, get_time_ms());
+  sl_zigbee_app_debug_println("OCC -> %s   <%d>", (OCC_GROUP_ON == state) ? "ON" : ((OCC_GROUP_MID == state) ? "MID" : "OFF"), get_time_ms());
   #endif
 }
 
-// RX Incoming cmd from multicast
-// All multicasts that are directed to the occ sensor come through here
-// Sync timers, set new local state, timestamp, check for dups
-void set_new_occ_state(sl_zigbee_af_cluster_command_t *cmd)
+static uint8_t grp_level_for_state(void *ctx, occ_group_state_t state)
 {
-  uint8_t base_idx = cmd->payloadStartIndex;
-  bool update_next_state = true;
-
-  occ_sensor_state_t new_state = cmd->buffer[base_idx];
-  uint8_t occ_level = cmd->buffer[base_idx+3];
-
-  // Don't respond from others in the group
-  if(is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
+  (void)ctx;
+  switch(state)
   {
-     sl_zigbee_app_debug_println("OCC is Disabled   <%d>", get_time_ms());
+     case OCC_GROUP_ON:
+        return(get_wake_level());
+     case OCC_GROUP_MID:
+        return(get_mid_light_level());
+     default:
+        return(lights_turn_off() ? 0 : get_mid_light_level());
+  }
+}
+
+static uint8_t grp_current_level(void *ctx)
+{
+  (void)ctx;
+  return(get_present_light_level());
+}
+
+static void grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t state,
+                               occ_keepalive_reason_t reason, uint8_t level)
+{
+  (void)ctx;
+  tx_occ_keepalive(time_s, (uint8_t)state, (uint8_t)reason, level);
+  #if (OCC_PRINT >= 1)
+  sl_zigbee_app_debug_println("OCC TX keepalive %s %d s lvl:%d   <%d>",
+                              (OCC_KEEPALIVE_WAKE == reason) ? "wake" : "refresh", time_s, level, get_time_ms());
+  #endif
+}
+
+static void grp_send_level_change(void *ctx, occ_group_state_t state, uint8_t level)
+{
+  (void)ctx;
+  tx_occ_level_change((uint8_t)state, level);
+  #if (OCC_PRINT >= 1)
+  sl_zigbee_app_debug_println("OCC TX level change %d lvl:%d   <%d>", state, level, get_time_ms());
+  #endif
+}
+
+static uint32_t grp_random_ms(void *ctx, uint32_t max_ms)
+{
+  (void)ctx;
+  return(get_random_number(max_ms, 0UL));
+}
+
+static const occ_group_ops_t occ_group_ops =
+{
+  .ctx = NULL,
+  .dim_timeout_ms = grp_dim_timeout_ms,
+  .off_timeout_ms = grp_off_timeout_ms,
+  .go_to_state = grp_go_to_state,
+  .level_for_state = grp_level_for_state,
+  .current_level = grp_current_level,
+  .send_keepalive = grp_send_keepalive,
+  .send_level_change = grp_send_level_change,
+  .random_ms = grp_random_ms,
+};
+
+// Every light starts ON with a full timer and sends nothing
+static void adaptiv_init(void)
+{
+  present_local_state = eOCC_SENSOR_ADAPTIV;
+  switch_level = get_max_light_level();
+  off_time_stamp = get_time_ms();
+  occ_group_init(&occ_group, &occ_group_ops, get_time_ms());
+}
+
+/*****  OFF: the special cases  *****/
+static void adaptiv_off_sample(uint32_t now_ms, bool occupied)
+{
+  bool em_mode = is_app_flags_nonvol_set(B_EM_MODE);
+  uint32_t delay = off_settle_ms();
+
+  if(em_mode)
+  {
+     clear_off_from_switch();
+     restore_unoccupied_delay();
+  }
+  else if(off_from_switch())
+  {
+     // Off from a switch: occupancy may not turn the lights on for 5 minutes,
+     // every occupancy restarts the 5 minutes
+     delay = OCC_SWITCH_OFF_HOLD_MS;
+     if(occupied)
+     {
+        off_time_stamp = now_ms;
+     }
+  }
+
+  if(has_timed_out(off_time_stamp, delay))
+  {
+     if(!em_mode)
+     {
+        clear_off_from_switch();
+        restore_unoccupied_delay();
+     }
+
+     // Past delay time, allow occ trip to turn on lights
+     if(occupied)
+     {
+        if(em_mode || !is_app_flags_nonvol_set(B_MANUAL_ON_MODE))
+        {
+           #if (OCC_PRINT >= 1)
+           sl_zigbee_app_debug_println("OCC Sensor tripped while off  <%d>", now_ms);
+           #endif
+           occ_group_on_occupancy(&occ_group, now_ms);
+        }
+        set_occupied_attribute(true);
+     }
+     else if(em_mode)
+     {
+        set_occupied_attribute(true);
+     }
+
+     // If no occ trip for a long time, set on level to max light level.
+     if(!em_mode && has_timed_out(off_time_stamp, (DEFAULT_OCC_SENSOR_XXXL_DELAY*1000UL)))
+     {
+        switch_level = get_max_light_level();
+        if(get_max_light_level() != get_on_light_level())
+        {
+            write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, &switch_level);
+        }
+     }
+  }
+
+  // Lights turned on via external source ie. switch.  (A light that stays
+  // on at mid while "off", EM mode or min level, only by an on cmd.)
+  if(OCC_GROUP_OFF == occ_group_state(&occ_group))
+  {
+     if(lights_turn_off() ? (1 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID)) : on_from_switch())
+     {
+        sl_zigbee_app_debug_println("OCC external on cmd   <%d>", now_ms);
+        occ_group_external_on(&occ_group, now_ms);
+        set_occupied_attribute(true);
+        if(!em_mode)
+        {
+           clear_off_from_switch();
+           clear_on_from_switch();
+        }
+     }
+  }
+}
+
+// Called every sensor sample on an Adaptiv network
+static void adaptiv_sample(bool occupied)
+{
+  uint32_t now_ms = get_time_ms();
+
+  // External off cmd (switch, gateway)
+  if((0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID)) &&
+     (OCC_GROUP_OFF != occ_group_state(&occ_group)))
+  {
+     occ_group_external_off(&occ_group);
+     enter_off_local(now_ms);
+     set_occupied_attribute(false);
+  }
+
+  if(!device_is_in_a_group())
+  {
      return;
   }
 
-  // If something in the queue, abort
-  sl_zigbee_af_event_set_inactive(&occ_announce_event);
-
-  // Look for dups or timing issues
-  if((occ_sensor_state == unoccupied_unoccupied_mid_wait) ||
-     (occ_sensor_state == unoccupied_unoccupied_mid))
+  // Sensor readings are ignored while the light is changing level
+  if(allow_occupancy_sensor_control)
   {
-     if((eUNOCCUPIED_UNOCCUPIED_MID_WAIT == new_state) ||
-        (eUNOCCUPIED_UNOCCUPIED_MID == new_state))
+     if(OCC_GROUP_OFF == occ_group_state(&occ_group))
      {
-        // Dup.  To get here means we are presently in one of the mid states
-        // and the incoming cmd says to go to a mid state....toss this cmd.
-        update_next_state = false;
-        #if (OCC_PRINT >= 1)
-        sl_zigbee_app_debug_print("DUP ");
-        #endif
+        adaptiv_off_sample(now_ms, occupied);
      }
-     else if(eOCCUPIED_OCCUPIED_ON == new_state)
+     else if(occupied)
      {
-         // To get here means we are presently in one of the mid states and
-         // the incoming cmd says to go to a max/on state.  Force the correct
-         // on level, which may not be correct due to active dim/mid state.
-        if(read_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID) != occupancy_on_light_level)
-        {
-           write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, (uint8_t  *)&occupancy_on_light_level);
-           #if (OCC_PRINT >= 1)
-           sl_zigbee_app_debug_print("LVL ");
-           #endif
-        }
+        occ_group_on_occupancy(&occ_group, now_ms);
+        set_occupied_attribute(true);
      }
      else
      {
-
      }
   }
 
-  #if (OCC_PRINT >= 1)
-  char state_string[40] = {0};
-  uint16_t mac_id = GET_16_FROM_ARRAY(cmd->buffer, base_idx+1);
-  spew_state(new_state, state_string);
-  sl_zigbee_app_debug_println(">>OCC [0x%04X] %s lvl:%d   <%d>", mac_id, state_string, occ_level, get_time_ms());
-  #else
-  (void)occ_level;
-  #endif
+  // Timers and sends run all the time (a wake goes out while the light ramps up)
+  occ_group_tick(&occ_group, now_ms);
 
-  if(update_next_state)
+  if(OCC_GROUP_MID == occ_group_state(&occ_group))
   {
-     set_occ_sensor_local_state(new_state);
+     // The dim ramp saved mid to the on level
+     keep_on_level_at_wake_level();
+  }
+}
+
+// RX keepalive / level change multicast from another light in the group
+void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd)
+{
+  const uint8_t *payload = &cmd->buffer[cmd->payloadStartIndex];
+  uint16_t length = (cmd->bufLen > cmd->payloadStartIndex) ? (uint16_t)(cmd->bufLen - cmd->payloadStartIndex) : 0U;
+  uint32_t now_ms = get_time_ms();
+
+  if(eADAPTIV_NWK != get_present_network())
+  {
+     return;
+  }
+  if(cmd->source == sl_zigbee_get_node_id())
+  {
+     return;     // our own multicast
+  }
+  if(is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
+  {
+     sl_zigbee_app_debug_println("OCC is Disabled   <%d>", now_ms);
+     return;
+  }
+  if(0 == get_unoccupied_delay())
+  {
+     return;     // occupancy control is off
+  }
+
+  if(ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID == cmd->commandId)
+  {
+     if((5U > length) || (OCC_GROUP_OFF < payload[2]))
+     {
+        return;
+     }
+     uint16_t time_s = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
+     #if (OCC_PRINT >= 1)
+     sl_zigbee_app_debug_println(">>OCC [0x%04X] keepalive %s %d s lvl:%d   <%d>", cmd->source,
+                                 payload[3] ? "refresh" : "wake", time_s, payload[4], now_ms);
+     #endif
+     occ_group_rx_keepalive(&occ_group, now_ms, time_s, (occ_group_state_t)payload[2],
+                            (occ_keepalive_reason_t)payload[3]);
+  }
+  else
+  {
+     if((2U > length) || (OCC_GROUP_OFF < payload[0]))
+     {
+        return;
+     }
+     #if (OCC_PRINT >= 1)
+     sl_zigbee_app_debug_println(">>OCC [0x%04X] level change %d lvl:%d   <%d>", cmd->source,
+                                 payload[0], payload[1], now_ms);
+     #endif
+     occ_group_rx_level_change(&occ_group, now_ms, (occ_group_state_t)payload[0]);
   }
 }
 
@@ -365,7 +558,7 @@ bool is_occ_mid_or_lower(void)
 {
   if(eADAPTIV_NWK == get_present_network())
   {
-     return(eUNOCCUPIED_UNOCCUPIED_MID <= present_local_state);
+     return(OCC_GROUP_ON != occ_group_state(&occ_group));
   }
   else if((eNO_NWK == get_present_network()) || (eSTAND_ALONE == get_present_network()))
   {
@@ -382,26 +575,26 @@ static void unsuspend_occ_sensor_task(taskParm_t parm0, taskParm_t parm1)
 {
   if(has_timed_out(parm0.u32, parm1.u32))
   {
+     uint32_t now_ms = get_time_ms();
+
      // Determine if coming out of an off cmd
-     if(0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID))
+     if((0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID)) ||
+        (is_app_flags_nonvol_set(B_EM_MODE) && off_from_switch()))
      {
         // Light is off
-        set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_OFF_WAIT);
-        set_occupied_attribute(false);
-     }
-     else if(is_app_flags_nonvol_set(B_EM_MODE))
-     {
-        if(off_from_switch())
+        if(OCC_GROUP_OFF != occ_group_state(&occ_group))
         {
-           set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_OFF_WAIT);
-           set_occupied_attribute(false);
+           occ_group_external_off(&occ_group);
         }
+        enter_off_local(now_ms);
+        set_occupied_attribute(false);
      }
      else
      {
         // Light is on, reset delay, keep present occ state
-        occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
-        occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
+        occupancy_sensor_info.time_stamp_unoccupied_to_occupied = now_ms;
+        occupancy_sensor_info.time_stamp_occupied_to_unoccupied = now_ms;
+        occ_group_restart_timer(&occ_group, now_ms);
         set_occupied_attribute(false);
      }
      // NOTE: This enables the occupancy sensor now.
@@ -497,21 +690,7 @@ void occ_sensor_logic(bool occupied)
   switch(get_present_network())
   {
      case eADAPTIV_NWK:
-        if((0 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID)) &&
-           (present_local_state != eUNOCCUPIED_UNOCCUPIED_OFF_WAIT) &&
-           (present_local_state != eUNOCCUPIED_UNOCCUPIED_OFF) &&
-           (present_local_state != eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE))
-        {
-           // External off cmd or timing to off
-           set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_OFF_WAIT);
-           set_occupied_attribute(false);
-        }
-
-        // Run state machine
-        if(allow_occupancy_sensor_control && device_is_in_a_group())
-        {
-           occ_sensor_state();
-        }
+        adaptiv_sample(occupied);
         break;
 
      case eDAINTREE_NWK:
@@ -561,271 +740,6 @@ void occ_sensor_logic(bool occupied)
      default:
         break;
 
-  }
-}
-
-// Reset state, assumed the occ attr is true when entering this state.
-// Stay until occ sensor has stabilized and un-occupied
-static void occupied_occupied_on(void)
-{
-  if(sensor_debounced())
-  {
-     if(false == occupancy_sensor_info.present_occupied_value)
-     {
-        set_occ_sensor_local_state(eOCCUPIED_UNOCCUPIED_ON_WAIT);
-        occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
-     }
-     else if(true == occupancy_sensor_info.present_occupied_value)
-     {
-        // Stay in this state
-        set_occupied_attribute(true);
-     }
-  }
-  else
-  {
-     // Stay here
-  }
-}
-
-// Attribute still reports occupied, but sensor says unoccupied, light is on.
-// Stay here till we meet criteria = continuous no occ for delay time
-static void occupied_unoccupied_on_wait(void)
-{
-  uint32_t delay = (uint32_t)get_unoccupied_delay() * 1000UL; // Delay attr in seconds
-
-  if(true == occupancy_sensor_info.present_occupied_value)
-  {
-     delay_tx_occ_sensor_present_state(eOCCUPIED_OCCUPIED_ON);
-     set_occupied_attribute(true);
-  }
-  else if(has_timed_out(occupancy_sensor_info.time_stamp_occupied_to_unoccupied, delay) &&
-         (false == occupancy_sensor_info.present_occupied_value))
-  {
-     // Officially unoccupied
-     set_occupied_attribute(false);
-     occ_time_stamp = get_time_ms();
-     occupancy_on_light_level = save_present_light_level_to_on_level_attribute();
-     delay_tx_occ_sensor_present_state(eUNOCCUPIED_UNOCCUPIED_MID);
-  }
-  else
-  {
-
-  }
-}
-
-// This is a one and done state, will turn light to mid level, and move on
-// to the next state.  This is a sync state
-static void unoccupied_unoccupied_mid(void)
-{
-  // If a occ event occurs on another light it will multicast to go to last level.
-  // But if last level/next state has not completed, last level won't be valid.
-  // So do it here and in the next state.
-  occupancy_on_light_level = save_present_light_level_to_on_level_attribute();
-
-  // All occ sensors are in this state.  Issue local dim to mid
-  if(get_present_light_level() > get_mid_light_level())
-  {
-     // move_to_level_onoff() adds extra time to the disable sensors
-      move_to_level_onoff (get_mid_light_level (), DSECS_1_SECS);
-  }
-  set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_MID_WAIT);
-
-  // Allow occ event interrupt the dim to mid, and go directly to max
-  suspend_occ_sensor_control(DSECS_0_SECS);
-}
-
-// We're at mid level, wait make sure siLab level ramp is done
-static void unoccupied_unoccupied_mid_wait(void)
-{
-  uint32_t delay = (uint32_t)get_unoccupied_delay_to_off() * 1000UL; // Delay attr in seconds
-
-  // Reduce constant writes
-  if(read_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID) != occupancy_on_light_level)
-  {
-      write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, (uint8_t  *)&occupancy_on_light_level);
-  }
-
-  if(true == occupancy_sensor_info.present_occupied_value)
-  {
-     tx_occ_sensor_state(eOCCUPIED_OCCUPIED_ON, get_time_ms(), get_on_light_level());
-  }
-  else if(has_timed_out(occ_time_stamp, delay))
-  {
-     // All occ sensors are now in this state, sync'ed from unoccupied_unoccupied_mid()
-     occ_sensor_state_t next_state = eUNOCCUPIED_UNOCCUPIED_OFF_WAIT;
-
-     if(0 == get_min_light_level() && (false == is_app_flags_nonvol_set(B_EM_MODE)))
-     {
-        // NOTE: suspend_all_sensors() in cb
-        sl_zigbee_af_on_off_cluster_off_cb();
-
-        #if (OCC_PRINT >= 1)
-        sl_zigbee_app_debug_println("OCC Lights OFF   <%d>", get_time_ms());
-        #endif
-     }
-     else
-     {
-        // NOTE: We are in EM mode.  Saved level is valid
-        // Go to normal _OFF_WAIT which then decides to go to EM mode
-        #if (OCC_PRINT >= 1)
-        sl_zigbee_app_debug_println("OCC Lights ON em_mode   <%d>", get_time_ms());
-        #endif
-     }
-
-     set_occ_sensor_local_state(next_state);
-
-     // sl_zigbee_af_on_off_cluster_off_cb() and em_mode will have different
-     // sensor disables times.  So over ride it here to make the same.
-     suspend_occ_sensor_control(DSECS_HALF_SECS);
-  }
-  else
-  {
-      // Waiting
-  }
-}
-
-// One and done..
-// Also entry point for off cmd from switch
-// NOTE: Used to Lutron delay crap, which has been scrapped
-static void unoccupied_unoccupied_off_wait(void)
-{
-  clear_on_from_switch();
-
-  if(is_app_flags_nonvol_set(B_EM_MODE))
-  {
-     set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE);
-  }
-  else
-  {
-     set_occ_sensor_local_state(eUNOCCUPIED_UNOCCUPIED_OFF);
-  }
-  occ_time_stamp = get_time_ms();
-}
-
-// Final resting place, wait for either occ trip or an on cmd from switch
-static void unoccupied_unoccupied_off(void)
-{
-#ifdef USE_ZIGBEE_ATTRIBUTE_DELAY
-  uint32_t delay = (uint32_t)read_occupancy_sensor_attribute(ZCL_PIR_UNOCCUPIED_TO_OCCUPIED_DELAY_ATTRIBUTE_ID);
-#else
-  uint32_t delay = (uint32_t)DEFAULT_OCC_SENSOR_DELAY_TO_OCC;
-#endif
-  delay *= 1000UL;  // Attribute delay in seconds
-
-  // If delay = 0, give finite time to settle system
-  if(250UL > delay)
-  {
-     delay = 250UL;    // mS
-  }
-
-  // If got here because off button was pressed, delay 5 minutes, then allow
-  // occ sensor.  Timer gets reset on every occ trip.
-  if(off_from_switch())
-  {
-     delay = (5UL*60UL*1000UL);   // John 3/30, 5 minutes
-
-     if(true == occupancy_sensor_info.present_occupied_value)
-     {
-        // Reset timer John 3/30
-        occ_time_stamp = get_time_ms();
-        #if (OCC_PRINT >= 1)
-        sl_zigbee_app_debug_println("OCC Reset timer   <%d>", occ_time_stamp);
-        #endif
-     }
-  }
-
-  // If from off button delay is 5 minutes, else delay is from attribute
-  if(has_timed_out(occ_time_stamp, delay))
-  {
-     clear_off_from_switch();
-     restore_unoccupied_delay();
-
-     // Past delay time, allow occ trip to turn on lights
-     if(true == occupancy_sensor_info.present_occupied_value)
-     {
-        if(!is_app_flags_nonvol_set(B_MANUAL_ON_MODE))
-        {
-           #if (OCC_PRINT >= 1)
-           sl_zigbee_app_debug_println("OCC Sensor tripped while off  <%d>", get_time_ms());
-           #endif
-           tx_occ_sensor_state(eOCCUPIED_OCCUPIED_ON, get_time_ms(), get_on_light_level());
-        }
-        set_occupied_attribute(true);
-     }
-
-     // If no occ trip for a long time, set on level to max light level.
-     if(has_timed_out(occ_time_stamp, (DEFAULT_OCC_SENSOR_XXXL_DELAY*1000UL)))
-     {
-        occupancy_on_light_level = get_max_light_level();
-        if(get_max_light_level() != get_on_light_level())
-        {
-            write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, (uint8_t  *)&occupancy_on_light_level);
-        }
-     }
-  }
-
-  if(1 == read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID))
-  {
-    // Lights turned on via external source ie. switch, another occ sensor etc
-    sl_zigbee_app_debug_println("OCC external on cmd   <%d>", get_time_ms());
-
-    set_occ_sensor_local_state(eOCCUPIED_OCCUPIED_ON);
-    set_occupied_attribute(true);
-    clear_off_from_switch();
-    clear_on_from_switch();
-  }
-}
-
-static void unoccupied_unoccupied_off_em_mode(void)
-{
-#ifdef USE_ZIGBEE_ATTRIBUTE_DELAY
-  uint32_t delay = (uint32_t)read_occupancy_sensor_attribute(ZCL_PIR_UNOCCUPIED_TO_OCCUPIED_DELAY_ATTRIBUTE_ID);
-#else
-  uint32_t delay = (uint32_t)DEFAULT_OCC_SENSOR_DELAY_TO_OCC;
-#endif
-  delay *= 1000UL;  // Attribute delay in seconds
-
-  // If delay = 0, give finite time to settle system
-  if(250UL > delay)
-  {
-     delay = 250UL;    // mS
-  }
-
-  clear_off_from_switch();
-  restore_unoccupied_delay();
-
-  if(has_timed_out(occ_time_stamp, delay))
-  {
-     // Past delay time, allow occ trip to turn on lights
-     if(true == occupancy_sensor_info.present_occupied_value)
-     {
-        #if (OCC_PRINT >= 1)
-        sl_zigbee_app_debug_println("OCC Sensor tripped while off  <%d>", get_time_ms());
-        #endif
-        tx_occ_sensor_state(eOCCUPIED_OCCUPIED_ON, get_time_ms(), get_on_light_level());
-     }
-     set_occupied_attribute(true);
-  }
-
-  if(on_from_switch())
-  {
-    // Lights turned on via external source ie. switch, another occ sensor etc
-    sl_zigbee_app_debug_println("OCC external on cmd   <%d>", get_time_ms());
-
-    set_occ_sensor_local_state(eOCCUPIED_OCCUPIED_ON);
-    set_occupied_attribute(true);
-  }
-}
-
-
-// Wait here until in new state is received
-static void occ_sensor_nop(void)
-{
-  if(has_timed_out(occ_time_stamp, 15000UL))  // Larger than random delay
-  {
-     sl_zigbee_app_debug_println("TIMED OUT NOP OCC STATE %d   <%d>", queue_state, get_time_ms());
-     tx_occ_sensor_state(eOCCUPIED_OCCUPIED_ON, get_time_ms(), get_max_light_level());
-     //delay_tx_occ_sensor_present_state(queue_state);
   }
 }
 
@@ -1248,25 +1162,13 @@ void spew_occ_state(void)
 
 static void spew_state(occ_sensor_state_t state, char *state_string)
 {
+  static const char *group_state[] = { "ON", "MID", "OFF" };
+
   switch(state)
   {
-     case eOCCUPIED_OCCUPIED_ON:
-        sprintf(state_string, "eOCCUPIED_OCCUPIED_ON");
-        break;
-     case eOCCUPIED_UNOCCUPIED_ON_WAIT:
-        sprintf(state_string, "eOCCUPIED_UNOCCUPIED_ON_WAIT");
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_MID_WAIT:
-        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_MID_WAIT");
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_MID:
-        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_MID");
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF:
-        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_OFF");
-        break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF_WAIT:
-        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_OFF_WAIT");
+     case eOCC_SENSOR_ADAPTIV:
+        sprintf(state_string, "ADAPTIV %s %lu s", group_state[occ_group_state(&occ_group)],
+                (unsigned long)(occ_group_remaining_ms(&occ_group, get_time_ms()) / 1000UL));
         break;
      case eOCCUPIED_OCCUPIED_ON_DT:
         sprintf(state_string, "eOCCUPIED_OCCUPIED_ON_DT");
@@ -1277,11 +1179,17 @@ static void spew_state(occ_sensor_state_t state, char *state_string)
      case eUNOCCUPIED_UNOCCUPIED_OFF_DT:
         sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_OFF_DT");
         break;
-     case eOCCUPENCY_SENSOR_NOP:
-        sprintf(state_string, "eOCCUPENCY_SENSOR_NOP");
+     case eOCCUPIED_OCCUPIED_ON_NN:
+        sprintf(state_string, "eOCCUPIED_OCCUPIED_ON_NN");
         break;
-     case eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE:
-        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_OFF_EM_MODE");
+     case eOCCUPIED_UNOCCUPIED_ON_WAIT_NN:
+        sprintf(state_string, "eOCCUPIED_UNOCCUPIED_ON_WAIT_NN");
+        break;
+     case eUNOCCUPIED_UNOCCUPIED_MID_WAIT_NN:
+        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_MID_WAIT_NN");
+        break;
+     case eUNOCCUPIED_UNOCCUPIED_OFF_NN:
+        sprintf(state_string, "eUNOCCUPIED_UNOCCUPIED_OFF_NN");
         break;
      default:
         sprintf(state_string, "WARNING UNKNOW OCC STATE");

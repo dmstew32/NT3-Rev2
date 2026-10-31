@@ -3,6 +3,8 @@
 #define TEST_STUB_ZAP_TYPE_H_
 #include "nt3_test_stubs.h"
 #define ZCL_BOOLEAN_ATTRIBUTE_TYPE       0x10
+#define ZCL_BITMAP8_ATTRIBUTE_TYPE       0x18
+#define ZCL_ENUM8_ATTRIBUTE_TYPE         0x30
 #define ZCL_INT8U_ATTRIBUTE_TYPE         0x20
 #define ZCL_INT16U_ATTRIBUTE_TYPE        0x21
 #define ZCL_INT32U_ATTRIBUTE_TYPE        0x23
