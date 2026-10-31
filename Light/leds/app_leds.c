@@ -246,6 +246,11 @@ bool app_leds_green_off_for_lux(void)
   return(true);
 }
 
+bool app_leds_green_is_lit(void)
+{
+  return(occ_led_on || !is_green_led_free());
+}
+
 void app_leds_green_lux_done(void)
 {
   green_lux_hold = false;

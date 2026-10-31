@@ -10,6 +10,11 @@
  * wait LIGHT_SENSOR_MEASURE_MS, read, green back on (app_leds).  Green is off
  * for about LIGHT_SENSOR_MEASURE_MS.  While a green flash pattern runs the
  * reading waits (LIGHT_SENSOR_RETRY_MS) for it to end.
+ *
+ * While green is lit (occupancy) a dark reading is taken only every
+ * LIGHT_SENSOR_LIT_READ_MS; the readings in between repeat the last one, so
+ * green blinks off once per average instead of every sample.  Calibration
+ * always reads.
  */
 #include <stdlib.h>
 #include "af.h"
@@ -37,10 +42,13 @@
 // Sensor's maximum high resolution measurement time (typical 120 ms)
 #define LIGHT_SENSOR_MEASURE_MS    (180UL)
 #define LIGHT_SENSOR_RETRY_MS      (50UL)
+#define LIGHT_SENSOR_LIT_READ_MS   (LIGHT_SENSOR_UPDATE_AVERAGE_MS)   // one fresh reading per average
 
 static sl_zigbee_af_event_t light_sensor_event;       // every sample period
 static sl_zigbee_af_event_t light_sensor_read_event;  // green off -> measure -> read
 static bool light_sensor_measuring = false;
+static bool light_sensor_have_reading = false;
+static uint32_t light_sensor_dark_read_ms = 0UL;    // last real reading started
 static light_sensor_info_t light_sensor_info = {0,};
 
 // Fwd declarations
@@ -89,11 +97,27 @@ static void update_light_sensor_task(taskParm_t parm0, taskParm_t parm1)
 }
 
 // Takes one reading with the green LED off, see top of file.
+static void queue_reading(uint16_t reading)
+{
+  // Start average/logic outside of ember event
+  taskParm_t arg0, arg1;
+  arg0.u32 = get_time_ms();
+  arg1.u16 = reading;
+  addTask(update_light_sensor_task, arg0, arg1 );
+}
+
 static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
 {
   (void)event;
   if(!light_sensor_measuring)
   {
+     if(app_leds_green_is_lit() && light_sensor_have_reading && !light_sensor_info.in_claibration &&
+        !has_timed_out(light_sensor_dark_read_ms, LIGHT_SENSOR_LIT_READ_MS))
+     {
+        // Green lit: repeat the last reading, don't blink it off
+        queue_reading(light_sensor_info.last_raw);
+        return;
+     }
      if(!app_leds_green_off_for_lux())
      {
         // Green flash running
@@ -101,6 +125,7 @@ static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
         return;
      }
      // Restart the measurement so all of it is in the dark
+     light_sensor_dark_read_ms = get_time_ms();
      (void)hal_light_sensor_set_mode(LIGHT_SENSOR_MODE_HI_RES);
      light_sensor_measuring = true;
      sl_zigbee_af_event_set_delay_ms(&light_sensor_read_event, LIGHT_SENSOR_MEASURE_MS);
@@ -110,12 +135,10 @@ static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
   uint16_t reading = hal_light_sensor_read_data();
   light_sensor_measuring = false;
   app_leds_green_lux_done();
+  light_sensor_have_reading = true;
+  light_sensor_info.last_raw = reading;
 
-  // Start average/logic outside of ember event
-  taskParm_t arg0, arg1;
-  arg0.u32 = get_time_ms();
-  arg1.u16 = reading;
-  addTask(update_light_sensor_task, arg0, arg1 );
+  queue_reading(reading);
 
   #if (0 != HAL_LIGHT_SENSOR_PRINT)
   sl_zigbee_app_debug_println("[%d] %d   <%d>", light_sensor_info.index, reading, get_time_ms());
@@ -177,6 +200,7 @@ void stop_reading_light_sensor(void)
 uint32_t hal_light_sensor_init(void)
 {
   memset(&light_sensor_info, 0, sizeof(light_sensor_info_t));
+  light_sensor_have_reading = false;
 
   if(hal_light_sensor_turn_on())
   {

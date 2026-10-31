@@ -428,6 +428,18 @@ TEST_F(AppLeds, OccupancyThatEndsDuringALuxReadingIsShownAfterIt)
     EXPECT_EQ((Trace{ "green(0)" }), trace());
 }
 
+TEST_F(AppLeds, GreenIsLitForOccupancyOrAFlash)
+{
+    EXPECT_FALSE(app_leds_green_is_lit());
+    app_leds_on_occupancy_sample(true);
+    EXPECT_TRUE(app_leds_green_is_lit());
+    m_now += APP_LEDS_OCCUPANCY_HOLD_MS;
+    app_leds_on_occupancy_sample(false);
+    EXPECT_FALSE(app_leds_green_is_lit());
+    app_leds_show_version_digit(APP_LED_GREEN, 1);
+    EXPECT_TRUE(app_leds_green_is_lit());
+}
+
 TEST_F(AppLeds, LuxReadingWaitsForAGreenFlash)
 {
     app_leds_show_version_digit(APP_LED_GREEN, 1);

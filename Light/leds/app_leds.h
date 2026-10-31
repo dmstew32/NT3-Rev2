@@ -31,7 +31,8 @@
  *   when red is free.
  * Green priority: green flash  >  lux reading  >  occupancy.
  *   Every light sensor reading is taken with green off (at most ~185 ms);
- *   occupancy resumes when a flash or reading ends.
+ *   occupancy resumes when a flash or reading ends.  While green is lit
+ *   that happens once per 20 s light sensor average (hal_light_sensor.c).
  */
 
 #include <stdbool.h>
@@ -72,5 +73,7 @@ void app_leds_on_occ_sensor_stopped(void);
 // try again later.  app_leds_green_lux_done() restores green.
 bool app_leds_green_off_for_lux(void);
 void app_leds_green_lux_done(void);
+// Green is showing something: occupancy or a green flash
+bool app_leds_green_is_lit(void);
 
 #endif /* APP_LEDS_H_ */

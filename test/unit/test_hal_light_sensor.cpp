@@ -20,10 +20,12 @@ I2C_TypeDef test_i2c0;
 FAKE_VALUE_FUNC(I2C_TransferReturn_TypeDef, I2CSPM_Transfer, I2C_TypeDef *, I2C_TransferSeq_TypeDef *);
 FAKE_VALUE_FUNC(bool, app_leds_green_off_for_lux);
 FAKE_VOID_FUNC(app_leds_green_lux_done);
+FAKE_VALUE_FUNC(bool, app_leds_green_is_lit);
 FAKE_VOID_FUNC(execute_light_sensor_logic, light_sensor_info_t *);
 FAKE_VALUE_FUNC(uint8_t, addTask, test_task_fn_t, taskParm_t, taskParm_t);
 FAKE_VALUE_FUNC(uint8_t, removeTask, test_task_fn_t);
 FAKE_VALUE_FUNC(uint32_t, get_time_ms);
+FAKE_VALUE_FUNC(bool, has_timed_out, uint32_t, uint32_t);
 FAKE_VOID_FUNC(sl_zigbee_af_event_init, sl_zigbee_af_event_t *, test_event_handler_t);
 FAKE_VOID_FUNC(sl_zigbee_af_event_set_active, sl_zigbee_af_event_t *);
 FAKE_VOID_FUNC(sl_zigbee_af_event_set_delay_ms, sl_zigbee_af_event_t *, uint32_t);
@@ -96,12 +98,14 @@ protected:
         RESET_FAKE(sl_zigbee_af_event_init); RESET_FAKE(sl_zigbee_af_event_set_active);
         RESET_FAKE(sl_zigbee_af_event_set_delay_ms); RESET_FAKE(sl_zigbee_af_event_set_inactive);
         RESET_FAKE(sl_zigbee_af_event_is_scheduled); RESET_FAKE(sl_zigbee_app_debug_println);
+        RESET_FAKE(app_leds_green_is_lit);
         FFF_RESET_HISTORY();
         I2CSPM_Transfer_fake.custom_fake = i2c;
         app_leds_green_off_for_lux_fake.custom_fake = green_off;
         app_leds_green_lux_done_fake.custom_fake = green_done;
         addTask_fake.custom_fake = add_task;
         get_time_ms_fake.custom_fake = now;
+        has_timed_out_fake.custom_fake = [](uint32_t ts, uint32_t d) { return (m_now - ts) >= d; };
         sl_zigbee_af_event_init_fake.custom_fake = ev_init;
         sl_zigbee_af_event_set_active_fake.custom_fake = ev_active;
         sl_zigbee_af_event_set_delay_ms_fake.custom_fake = ev_delay;
@@ -240,4 +244,52 @@ TEST_F(HalLightSensor, AverageGoesToTheLogicOnceTheBufferIsFull)
     }
     EXPECT_EQ(135, execute_light_sensor_logic_fake.arg0_val->mean_lux);
     EXPECT_EQ(170, hal_light_sensor_read_latest());
+}
+
+/* --------------------------------------------------------------- green lit (occupancy) */
+TEST_F(HalLightSensor, WhileGreenIsLitItBlinksOffOncePerAverageNotEverySample)
+{
+    app_leds_green_is_lit_fake.return_val = true;
+    uint32_t start = m_now;
+    run_until(start + 60000 + 180);
+    // a sample every 2.5 s, but green held off only every 20 s
+    EXPECT_EQ(60000 / LIGHT_SENSOR_HAL_SAMPLE_TIME_MS + 1, m_task_parm1.size());
+    ASSERT_EQ(60000 / LIGHT_SENSOR_UPDATE_AVERAGE_MS + 1, m_green_off_ms.size());
+    for(uint32_t ms : m_green_off_ms)
+    {
+        EXPECT_LE(ms, 200u);
+    }
+}
+
+TEST_F(HalLightSensor, RepeatedSamplesUseTheLastRealReading)
+{
+    app_leds_green_is_lit_fake.return_val = true;
+    m_lux_raw = 300;
+    run_until(m_now + 180);                     // first: a real reading
+    m_lux_raw = 999;                            // the sensor would read this now
+    run_until(m_now + 3 * LIGHT_SENSOR_HAL_SAMPLE_TIME_MS);
+    ASSERT_EQ(4u, m_task_parm1.size());
+    for(const taskParm_t &p : m_task_parm1)
+    {
+        EXPECT_EQ(300, p.u16);
+    }
+    EXPECT_EQ(1u, app_leds_green_off_for_lux_fake.call_count);
+}
+
+TEST_F(HalLightSensor, GreenOffMeansEverySampleIsARealReading)
+{
+    app_leds_green_is_lit_fake.return_val = true;
+    run_until(m_now + 180);
+    app_leds_green_is_lit_fake.return_val = false;   // nobody there: nobody sees the hold
+    run_until(m_now + 2 * LIGHT_SENSOR_HAL_SAMPLE_TIME_MS + 180);
+    EXPECT_EQ(3u, app_leds_green_off_for_lux_fake.call_count);
+}
+
+TEST_F(HalLightSensor, CalibrationAlwaysTakesRealReadings)
+{
+    app_leds_green_is_lit_fake.return_val = true;
+    stop_reading_light_sensor();
+    start_reading_light_sensor_for_calibration();
+    run_until(m_now + 4 * LIGHT_SENSOR_CAL_SAMPLE_TIME_MS + 180);
+    EXPECT_EQ(5u, app_leds_green_off_for_lux_fake.call_count);
 }
