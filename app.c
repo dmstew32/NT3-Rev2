@@ -292,7 +292,7 @@ void which_nwk_we_on_handler(void)
         {
            if(false == daintree_no_comms)
            {
-              move_to_level_onoff(get_max_light_level(), 10);
+              move_to_level_onoff(light_level_ceiling(), 10);
               daintree_no_comms = true;
            }
            sl_zigbee_af_event_set_delay_ms(&which_nwk_we_on_event, DISCO_POLL_TIME_DAINTREE);

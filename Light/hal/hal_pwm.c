@@ -16,6 +16,7 @@
 #include "light_on_off.h"
 #include "nwk_utils.h"
 #include "adaptiv_config.h"
+#include "light_levels.h"
 
 /*
  * Cut/paste from email 9/24/25
@@ -163,6 +164,8 @@ static void hal_output_pwm1_255(uint8_t value)
 {
   uint32_t compare_value;
 
+  // The light driver is unstable below LIGHT_PWM_MIN_STABLE (0 = off stays 0)
+  value = light_pwm_floor(value);
   compare_value = (value*top_pwm_counter)/255UL;
   TIMER_CompareBufSet(PWM_TIMER, PWM_1_CHAN, compare_value);
   pwm1.present_pwm_value = value;
@@ -175,6 +178,8 @@ static void hal_output_pwm2_255(uint8_t value)
 {
   uint32_t compare_value;
 
+  // The light driver is unstable below LIGHT_PWM_MIN_STABLE (0 = off stays 0)
+  value = light_pwm_floor(value);
   compare_value = (value*top_pwm_counter)/255UL;
   TIMER_CompareBufSet(PWM_TIMER, PWM_2_CHAN, compare_value);
   pwm2.present_pwm_value = value;
@@ -189,21 +194,22 @@ uint8_t hal_get_dim_pwm_255(void)
 }
 
 // Adjust each pwm for color and duty cycle
+// value = the Zigbee level, also written to the CurrentLevel attribute.
+// Daintree: the light output is the level mapped onto Daintree's min..max.
 void hal_set_dim_pwm_255(uint8_t value)
 {
-  uint8_t max_level = get_max_light_level();
+  uint8_t output = light_output_for_level(value);
 
-  dim_pwm_value = value;
-  // Check for OV
-  if(value > max_level)
+  if(eDAINTREE_NWK != get_present_network())
   {
-     dim_pwm_value = max_level;
-     value = max_level;
+     // Check for OV: the level is the light output, limited to max
+     value = output;
   }
+  dim_pwm_value = value;
 
   // Set color ratio
-  uint8_t pwm1_value = (uint8_t)(pwm_params.ratio_5000 * (float)value);
-  uint8_t pwm2_value = (uint8_t)(pwm_params.ratio_3000 * (float)value);
+  uint8_t pwm1_value = light_pwm_share(output, pwm_params.ratio_5000);
+  uint8_t pwm2_value = light_pwm_share(output, pwm_params.ratio_3000);
   if(pwm1_value > pwm1.max_pwm_value)
   {
      pwm1_value = pwm1.max_pwm_value;

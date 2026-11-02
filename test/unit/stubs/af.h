@@ -2,4 +2,6 @@
 #ifndef TEST_STUB_AF_H_
 #define TEST_STUB_AF_H_
 #include "nt3_test_stubs.h"
+#include "zap-id.h"
+#include "zap-type.h"
 #endif

@@ -194,7 +194,14 @@ void hal_set_green_led(uint8_t on) { trace("green_led(%u)", on); }
 void hal_toggle_green_led(void) { trace("toggle_green_led()"); }
 void hal_leds_init(void) { trace("leds_init()"); }
 void hal_leds_off(void) { hal_set_red_led(0); hal_set_green_led(0); }
-bool is_red_led_free(void) { return true; }
+bool is_red_led_free(void) { return true; }   // LED priorities are covered by test/unit
+bool hal_start_flashing_red_led_after(uint32_t d, uint32_t n, uint32_t on, uint32_t off)
+{
+  if(d) { trace("flash_red_after(%u, %u, %u, %u)", d, n, on, off); return true; }
+  return hal_start_flashing_red_led(n, on, off);
+}
+void hal_stop_flashing_red_led(void) { trace("stop_red()"); }
+bool is_green_led_free(void) { return true; }
 sl_zigbee_network_status_t sl_zigbee_af_network_state(void) { return SL_ZIGBEE_NO_NETWORK; }
 void save_min_light_level(uint8_t v) { s.min = v; trace("save_min_light_level(%u)", v); }
 void save_mid_light_level(uint8_t v) { s.mid = v; trace("save_mid_light_level(%u)", v); }

@@ -48,6 +48,7 @@
 #include "occ_sensor.h"
 #include "light_sensor.h"
 #include "light_on_off.h"
+#include "adaptiv_config.h"
 
 static bool _off_cmd = false;
 static bool _on_cmd = false;
@@ -221,7 +222,8 @@ sl_zigbee_af_status_t sl_zigbee_af_on_off_cluster_set_value_cb(uint8_t endpoint,
 #ifdef ADAPTIV_LIGHT
      if(!allow_light_off())
      {
-        uint8_t level = DEFAULT_MIN_LIGHT_LEVEL_DT;
+        // Off not allowed: go to the bottom level instead (Daintree: level 1 = its min)
+        uint8_t level = (eDAINTREE_NWK == get_present_network()) ? 1 : DEFAULT_MIN_LIGHT_LEVEL_DT;
         #if 0
         uint8_t saved_level = read_light_level_attribute(ZCL_CURRENT_LEVEL_ATTRIBUTE_ID);
         write_light_level_attribute(ZCL_ON_LEVEL_ATTRIBUTE_ID, &saved_level);

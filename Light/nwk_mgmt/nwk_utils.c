@@ -306,9 +306,10 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
         }
         case ZCL_OCCUPANCY_SENSING_CLUSTER_ID:
         {
-           if(ZCL_WRITE_OCCUPANCY_SENSOR_COMMAND_ID == cmd->commandId)
+           if((ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID == cmd->commandId) ||
+              (ZCL_OCCUPANCY_SENSOR_LEVEL_CHANGE_COMMAND_ID == cmd->commandId))
            {
-              set_new_occ_state(cmd);
+              occ_sensor_rx_group_cmd(cmd);
               return_status = true;
            }
            break;
@@ -548,14 +549,16 @@ bool write_light_level_attribute(sl_zigbee_af_attribute_id_t attributeID, uint8_
 uint8_t save_present_light_level_to_on_level_attribute(void)
 {
   uint8_t present_level = hal_get_dim_pwm_255();
+  // Daintree: Zigbee levels 1..255 (the mapping applies min/max)
+  uint8_t lowest = (eDAINTREE_NWK == get_present_network()) ? 1 : DEFAULT_MIN_LIGHT_LEVEL_DT;
 
-  if(get_max_light_level() < present_level)
+  if(light_level_ceiling() < present_level)
   {
-     present_level = get_max_light_level();
+     present_level = light_level_ceiling();
   }
-  else if(DEFAULT_MIN_LIGHT_LEVEL_DT > present_level)
+  else if(lowest > present_level)
   {
-     present_level = DEFAULT_MIN_LIGHT_LEVEL_DT;
+     present_level = lowest;
   }
   else
   {

@@ -41,10 +41,13 @@
 static uint8_t _min_level = DEFAULT_MIN_LIGHT_LEVEL_DT;
 static uint8_t _min_level_on_off = (DEFAULT_MIN_LIGHT_LEVEL_DT-1);
 static bool dimming_button_active = false;
+static bool level_cmd_from_network = false;   // the running level command came from a switch / gateway
 
-#define MIN_LEVEL _min_level
-#define MIN_LEVEL_ON_OFF _min_level_on_off
-#define MAX_LEVEL get_max_light_level()
+// Daintree: levels 1..255 (mapped onto Daintree's min..max when driving the
+// light), level 0 = off.  Others: _min_level (25) .. max, below = off.
+#define MIN_LEVEL level_control_min_level()
+#define MIN_LEVEL_ON_OFF level_control_off_level()
+#define MAX_LEVEL level_control_max_level()
 
 // 0 = off  1 = min  2 = all
 #ifndef LEVEL_PRINT
@@ -90,8 +93,33 @@ static bool dimming_button_active = false;
 #include "nwk_utils.h"
 #include "occ_sensor.h"
 #include "light_sensor.h"
+#include "adaptiv_config.h"
+#include "light_levels.h"
 
 extern void suspend_all_sensors(uint16_t Dsecs);
+
+static uint8_t level_control_min_level(void)
+{
+  return((eDAINTREE_NWK == get_present_network()) ? 1 : _min_level);
+}
+static uint8_t level_control_off_level(void)
+{
+  return((eDAINTREE_NWK == get_present_network()) ? 0 : _min_level_on_off);
+}
+static uint8_t level_control_max_level(void)
+{
+  return(light_level_ceiling());
+}
+
+// A level command from the network (switch) finished or was stopped: occupancy wakes to this level
+static void note_switch_level(void)
+{
+  if(level_cmd_from_network)
+  {
+     level_cmd_from_network = false;
+     occ_sensor_set_switch_level(hal_get_dim_pwm_255());
+  }
+}
 #endif // ADAPTIV_LIGHT
 
 #ifdef ZCL_USING_LEVEL_CONTROL_CLUSTER_START_UP_CURRENT_LEVEL_ATTRIBUTE
@@ -253,7 +281,9 @@ void sl_zigbee_af_level_control_cluster_server_tick_cb(uint8_t endpoint)
     assert(currentLevel < state->moveToLevel);
     currentLevel++;
   } else {
+#ifndef ADAPTIV_LIGHT
     assert(MIN_LEVEL < currentLevel);
+#endif // ADAPTIV_LIGHT
     assert(state->moveToLevel < currentLevel);
     currentLevel--;
   }
@@ -300,6 +330,7 @@ void sl_zigbee_af_level_control_cluster_server_tick_cb(uint8_t endpoint)
 
     // Save present level
     save_present_light_level_to_on_level_attribute();
+    note_switch_level();
 
 #endif // ADAPTIV_LIGHT
     if (state->commandId == ZCL_MOVE_TO_LEVEL_WITH_ON_OFF_COMMAND_ID
@@ -528,6 +559,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_to_lev
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("\n%sMOVE_TO_LEVEL lvl:%d t:%d %02X %02X   <%d>",
                                              "RX level-control:",
@@ -564,6 +598,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_to_lev
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("\n%sMOVE_TO_LEVEL_WITH_ON_OFF lvl:%d t:%d   <%d>",
                                              "RX level-control:",
@@ -596,6 +633,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_cb(sl_
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sMOVE %02X %02X   <%d>",
                                              "RX level-control:",
@@ -623,6 +663,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_move_with_o
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
 #ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
+#ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sMOVE_WITH_ON_OFF %02X %02X   <%d>",
                                              "RX level-control:",
@@ -649,6 +692,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_step_cb(sl_
       != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
+#ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
 #ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sSTEP Mode:%s size:%d t:%d   <%d>",
@@ -684,6 +730,9 @@ sl_zigbee_af_zcl_request_status_t sl_zigbee_af_level_control_cluster_step_with_o
       != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
     return SL_ZIGBEE_ZCL_STATUS_UNSUP_COMMAND;
   }
+#ifdef ADAPTIV_LIGHT
+  level_cmd_from_network = true;
+#endif // ADAPTIV_LIGHT
 #ifdef ADAPTIV_LIGHT
   #if (LEVEL_PRINT >= 1)
   sl_zigbee_af_level_control_cluster_println("%sSTEP_WITH_ON_OFF %s size:%d t:%d   <%d>",
@@ -803,6 +852,10 @@ static void moveToLevelHandler(uint8_t commandId,
   SL_IGNORE_TYPE_LIMIT_BEGIN;
   if (MAX_LEVEL < level) {
     state->moveToLevel = MAX_LEVEL;
+#ifdef ADAPTIV_LIGHT
+  } else if ((0 == level) && (eDAINTREE_NWK == get_present_network())) {
+    state->moveToLevel = 0;     // Daintree: level 0 = off, level 1 stays on
+#endif // ADAPTIV_LIGHT
   } else if (level < MIN_LEVEL) {
     state->moveToLevel = MIN_LEVEL;
   } else {
@@ -832,6 +885,7 @@ static void moveToLevelHandler(uint8_t commandId,
 
       // Save present level
       save_present_light_level_to_on_level_attribute();
+      note_switch_level();
 #endif // ADAPTIV_LIGHT
       goto send_default_response;
     }
@@ -1233,6 +1287,7 @@ static void stopHandler(uint8_t commandId,
   status = SL_ZIGBEE_ZCL_STATUS_SUCCESS;
 #ifdef ADAPTIV_LIGHT
   save_present_light_level_to_on_level_attribute();
+  note_switch_level();
 #endif // ADAPTIV_LIGHT
 
   send_default_response:
@@ -1620,6 +1675,7 @@ void move_to_level_onoff(uint8_t level, uint16_t transitionTimeDs)
 
      return;
   }
+  level_cmd_from_network = false;
   // This stops all sensors and forces occupancy sensor to reset to on_unoccupied state
   // Also suspend_light_sensor_control()
   suspend_all_sensors(transitionTimeDs + DSECS_1_SECS);
@@ -1627,12 +1683,12 @@ void move_to_level_onoff(uint8_t level, uint16_t transitionTimeDs)
   // Stop any occurring level changes
   stop_ramp();
 
-  // Saturate levels?
-  if(get_max_light_level() < level)
+  // Saturate levels?  (Daintree: min/max are applied by the level mapping)
+  if(light_level_ceiling() < level)
   {
-     level = get_max_light_level();
+     level = light_level_ceiling();
   }
-  if(0 != get_min_light_level())
+  if((0 != get_min_light_level()) && (eDAINTREE_NWK != get_present_network()))
   {
      if(get_min_light_level() > level)
      {
@@ -1668,6 +1724,7 @@ void move_to_level_dhs(uint8_t level, uint16_t transitionTimeDs)
 
      return;
   }
+  level_cmd_from_network = false;
 
   // Saturate max level
   if(get_max_light_level() < level)

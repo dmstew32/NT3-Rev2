@@ -10,7 +10,9 @@ bool tx_new_light_levels(void);
 bool tx_light_sensor_suspend_time(uint16_t Dsec_time);
 bool tx_light_sensor_data(uint8_t *data, uint8_t length);
 
-bool tx_occ_sensor_state(occ_sensor_state_t state, uint32_t time, uint8_t occ_level);
+// Group occupancy (occ_group.h): state is an occ_group_state_t, reason an occ_keepalive_reason_t
+bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level);
+bool tx_occ_level_change(uint8_t state, uint8_t level);
 
 bool tx_sink_info(uint8_t *data, uint8_t length);
 sl_status_t broadcast_autocommission_announce(void);

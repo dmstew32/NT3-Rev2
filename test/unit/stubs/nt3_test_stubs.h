@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,6 +70,39 @@ typedef struct
   uint8_t sequence;
   uint8_t radius;
 } sl_zigbee_aps_frame_t;
+
+typedef uint16_t sl_zigbee_af_attribute_id_t;
+typedef uint8_t sl_zigbee_af_attribute_type_t;
+#define ZA_MAX_HOPS 12
+typedef uint8_t sl_zigbee_af_zcl_request_status_t;
+typedef uint8_t sl_zigbee_incoming_message_type_t;
+typedef struct
+{
+  sl_zigbee_aps_frame_t *apsFrame;
+  sl_zigbee_incoming_message_type_t type;
+  sl_802154_short_addr_t source;
+  uint8_t *buffer;
+  uint16_t bufLen;
+  bool clusterSpecific;
+  bool mfgSpecific;
+  uint16_t mfgCode;
+  uint8_t seqNum;
+  uint8_t commandId;
+  uint8_t payloadStartIndex;
+  uint8_t direction;
+} sl_zigbee_af_cluster_command_t;
+
+#ifndef BIT
+#define BIT(x) (1U << (x))
+#endif
+#define ZCL_CLUSTER_SPECIFIC_COMMAND          BIT(0)
+#define ZCL_PROFILE_WIDE_COMMAND              0u
+#define ZCL_GLOBAL_COMMAND                    (ZCL_PROFILE_WIDE_COMMAND)
+#define ZCL_MANUFACTURER_SPECIFIC_MASK        BIT(2)
+#define ZCL_DISABLE_DEFAULT_RESPONSE_MASK     BIT(4)
+#define ZCL_FRAME_CONTROL_CLIENT_TO_SERVER    0u
+#define SL_ZIGBEE_BROADCAST_ENDPOINT          0xFFu
+#define SL_ZIGBEE_BROADCAST_ADDRESS           0xFFFCu
 
 typedef enum
 {
@@ -147,6 +181,21 @@ sl_status_t sl_zigbee_send_multicast(sl_zigbee_aps_frame_t *apsFrame, uint8_t ra
 sl_status_t sl_zigbee_af_send_unicast(sl_zigbee_outgoing_message_type_t type, uint16_t indexOrDestination,
                                       sl_zigbee_aps_frame_t *apsFrame, uint16_t messageLength, uint8_t *message);
 
+uint8_t sl_zigbee_af_next_sequence(void);
+sl_802154_short_addr_t sl_zigbee_af_get_node_id(void);
+sl_status_t sl_zigbee_af_send_broadcast(sl_802154_short_addr_t alias, sl_802154_short_addr_t destination,
+                                        uint8_t sequence, sl_zigbee_aps_frame_t *apsFrame,
+                                        uint16_t messageLength, uint8_t *message);
+sl_zigbee_af_status_t sl_zigbee_af_read_server_attribute(uint8_t endpoint, uint16_t cluster,
+                                                         sl_zigbee_af_attribute_id_t attributeID,
+                                                         uint8_t *dataPtr, uint8_t readLength);
+sl_zigbee_af_status_t sl_zigbee_af_write_server_attribute(uint8_t endpoint, uint16_t cluster,
+                                                          sl_zigbee_af_attribute_id_t attributeID,
+                                                          uint8_t *dataPtr, uint8_t dataType);
+sl_status_t sl_token_get_data(uint32_t token, uint32_t index, void *data, uint32_t length);
+sl_status_t sl_token_set_data(uint32_t token, uint32_t index, void *data, uint32_t length);
+#define TOKEN_APP_UNOCCUPIED_DELAY  0x1001u
+
 /* ---------------------------------------------------------------- prints */
 void sl_zigbee_af_core_println(const char *format, ...);
 void sl_zigbee_af_core_print(const char *format, ...);
@@ -187,6 +236,8 @@ typedef union
   int32_t *s32Ptr; uint32_t *u32Ptr; int16_t *s16Ptr; uint16_t *u16Ptr; int8_t *s8Ptr; uint8_t *u8Ptr;
 } taskParm_t;
 typedef void (*test_task_fn_t)(taskParm_t, taskParm_t);
+uint8_t addTask(test_task_fn_t funcPtr, taskParm_t parm0, taskParm_t parm1);   // RehTOS.h
+uint8_t removeTask(test_task_fn_t funcPtr);
 
 /* ---------------------------------------------------------------- application */
 typedef enum
@@ -229,6 +280,30 @@ void toggle_50_percent_mode(void);
 void toggle_em_mode(void);
 void start_display_fw_version(void);
 void set_dhs_time_stamp(void);
+
+// occupancy (light_on_off.h, nwk_utils.h, nwk_groups.h, nwk_multicast.h, light_sensor.h)
+uint8_t get_min_light_level(void);
+uint8_t get_mid_light_level(void);
+uint8_t get_on_light_level(void);
+uint16_t read_on_off_attribute(uint16_t attributeID);
+uint16_t read_light_level_attribute(sl_zigbee_af_attribute_id_t attributeID);
+bool write_light_level_attribute(sl_zigbee_af_attribute_id_t attributeID, uint8_t *data);
+bool off_from_switch(void);
+void clear_off_from_switch(void);
+bool on_from_switch(void);
+void clear_on_from_switch(void);
+bool set_app_flags_nonvol(uint32_t bit, bool value);
+bool is_app_flags_nonvol_set(uint32_t flag);
+uint32_t get_random_number(uint32_t max, uint32_t min);
+typedef struct
+{
+  uint16_t group_address;
+  uint8_t dst_ep;
+} device_binding_info_t;
+uint8_t get_number_of_multicast_bindings(void);
+void get_multicast_info(uint8_t index, device_binding_info_t *info);
+bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level);
+bool tx_occ_level_change(uint8_t state, uint8_t level);
 
 #ifdef __cplusplus
 }

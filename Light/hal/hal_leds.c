@@ -7,6 +7,8 @@
 
 #include "sl_zigbee_debug_print.h"
 
+// Red LED light reaches the light sensor; daylight harvesting waits after red turns on.
+// (Green is held off during lux readings instead; see app_leds.)
 void set_dhs_time_stamp(void);
 
 //#define LED_PRINTF
@@ -68,7 +70,6 @@ void hal_set_green_led(uint8_t on)
   if(on)
   {
       GPIO_PinOutClear(GREEN_LED_PORT, GREEN_LED_PIN);
-      set_dhs_time_stamp();
   }
   else
   {
@@ -121,6 +122,13 @@ static void red_led_handler(sl_zigbee_af_event_t *event)
 // ends always ends with the led off
 bool hal_start_flashing_red_led(uint32_t n_flashes, uint32_t led_on_time_ms, uint32_t led_off_time_ms)
 {
+  return(hal_start_flashing_red_led_after(0UL, n_flashes, led_on_time_ms, led_off_time_ms));
+}
+
+// Same, but the first flash starts start_delay_ms later (led off until then)
+bool hal_start_flashing_red_led_after(uint32_t start_delay_ms, uint32_t n_flashes,
+                                      uint32_t led_on_time_ms, uint32_t led_off_time_ms)
+{
   if((0 == n_flashes) || sl_zigbee_af_event_is_scheduled(&red_led_event))
   {
       return(false);
@@ -130,7 +138,14 @@ bool hal_start_flashing_red_led(uint32_t n_flashes, uint32_t led_on_time_ms, uin
   red_led.off_ms = led_off_time_ms;
 
   hal_set_red_led(0);
-  sl_zigbee_af_event_set_active(&red_led_event);
+  if(0UL == start_delay_ms)
+  {
+     sl_zigbee_af_event_set_active(&red_led_event);
+  }
+  else
+  {
+     sl_zigbee_af_event_set_delay_ms(&red_led_event, start_delay_ms);
+  }
   #ifdef LED_PRINTF
   sl_zigbee_app_debug_println("hal_start_flashing_red_led  n:%d on:0ff %d:%d mS",
                               n_flashes, red_led.on_ms,red_led.off_ms);
@@ -190,6 +205,11 @@ bool hal_start_flashing_green_led(uint32_t n_flashes, uint32_t led_on_time_ms, u
                               n_flashes, green_led.on_ms);
   #endif
   return(true);
+}
+
+bool is_green_led_free(void)
+{
+  return(!sl_zigbee_af_event_is_scheduled(&green_led_event));
 }
 
 void hal_stop_flashing_green_led(void)

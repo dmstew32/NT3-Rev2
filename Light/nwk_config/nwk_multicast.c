@@ -171,10 +171,10 @@ bool tx_new_light_levels(void)
   return(true);
 }
 
-// Show new state of this occ sensor
-bool tx_occ_sensor_state(occ_sensor_state_t state, uint32_t time, uint8_t occ_level)
+// Group occupancy keepalive: see occ_group.h
+bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level)
 {
-  uint8_t message[9] = {0};
+  uint8_t message[10] = {0};
 
   if(eADAPTIV_NWK != get_present_network())
   {
@@ -183,26 +183,47 @@ bool tx_occ_sensor_state(occ_sensor_state_t state, uint32_t time, uint8_t occ_le
 
   sl_zigbee_aps_frame_t apsFrame = _apsFrame;
   apsFrame.clusterId = ZCL_OCCUPANCY_SENSING_CLUSTER_ID;
-  sl_802154_long_addr_t thisEui64;
 
-  sl_zigbee_af_get_eui64(thisEui64);
-
-  //message[0] = (ZCL_FRAME_CONTROL_CLIENT_TO_SERVER |
   message[0] = (ZCL_CLUSTER_SPECIFIC_COMMAND | ZCL_FRAME_CONTROL_CLIENT_TO_SERVER |
                 ZCL_MANUFACTURER_SPECIFIC_MASK | ZCL_DISABLE_DEFAULT_RESPONSE_MASK);
   message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[3] = sl_zigbee_af_next_sequence();
-  message[4] = ZCL_WRITE_OCCUPANCY_SENSOR_COMMAND_ID;
+  message[4] = ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID;
+  // Payload
+  message[5] = GET_LSB_FROM_16(time_until_expiration_sec);
+  message[6] = GET_MSB_FROM_16(time_until_expiration_sec);
+  message[7] = state;
+  message[8] = reason;
+  message[9] = level;
+
+  return(tx_multicast(&apsFrame, &message[0], sizeof(message)));
+}
+
+// Group occupancy level change (ON/MID/OFF): see occ_group.h
+bool tx_occ_level_change(uint8_t state, uint8_t level)
+{
+  uint8_t message[7] = {0};
+
+  if(eADAPTIV_NWK != get_present_network())
+  {
+     return(true);
+  }
+
+  sl_zigbee_aps_frame_t apsFrame = _apsFrame;
+  apsFrame.clusterId = ZCL_OCCUPANCY_SENSING_CLUSTER_ID;
+
+  message[0] = (ZCL_CLUSTER_SPECIFIC_COMMAND | ZCL_FRAME_CONTROL_CLIENT_TO_SERVER |
+                ZCL_MANUFACTURER_SPECIFIC_MASK | ZCL_DISABLE_DEFAULT_RESPONSE_MASK);
+  message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
+  message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
+  message[3] = sl_zigbee_af_next_sequence();
+  message[4] = ZCL_OCCUPANCY_SENSOR_LEVEL_CHANGE_COMMAND_ID;
   // Payload
   message[5] = state;
-  message[6] = thisEui64[0];
-  message[7] = thisEui64[1];
-  message[8] = occ_level;
+  message[6] = level;
 
-  tx_multicast(&apsFrame, &message[0], sizeof(message));
-
-  return(true);
+  return(tx_multicast(&apsFrame, &message[0], sizeof(message)));
 }
 
 // If this device is in a group(s) will send a multicast to the  group(s).
