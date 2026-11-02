@@ -200,14 +200,7 @@ void hal_set_dim_pwm_255(uint8_t value)
 {
   uint8_t output = light_output_for_level(value);
 
-  if(eDAINTREE_NWK == get_present_network())
-  {
-     if(value > LIGHT_LEVEL_ZIGBEE_MAX)
-     {
-        value = LIGHT_LEVEL_ZIGBEE_MAX;
-     }
-  }
-  else
+  if(eDAINTREE_NWK != get_present_network())
   {
      // Check for OV: the level is the light output, limited to max
      value = output;

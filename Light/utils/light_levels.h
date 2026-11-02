@@ -4,9 +4,9 @@
 /*
  * Light level arithmetic (no hardware, no stack).
  *
- * Daintree: the Zigbee level (CurrentLevel, Move to Level) 1..254 is mapped
+ * Daintree: the Zigbee level (CurrentLevel, Move to Level) 1..255 is mapped
  * onto the min..max levels Daintree wrote (configuration cluster 0xFC01):
- * level 1 = min, 254 = max, straight line between.  Level 0 = off.  The
+ * level 1 = min, 255 = max, straight line between.  Level 0 = off.  The
  * Zigbee attributes keep the values as written / commanded.
  *
  * PWM: the light driver is unstable below LIGHT_PWM_MIN_STABLE, so every
@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 
-#define LIGHT_LEVEL_ZIGBEE_MAX   (254)
+#define LIGHT_LEVEL_ZIGBEE_MAX   (255)
 #define LIGHT_PWM_MIN_STABLE     (10)
 
 // Daintree: Zigbee level -> light output level

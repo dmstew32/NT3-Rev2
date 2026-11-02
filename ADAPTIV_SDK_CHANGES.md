@@ -22,7 +22,7 @@ changes: `grep -rn "ADAPTIV_LIGHT" simplicity_sdk_2025.6.3`.
 
 | Blocks | File (under `simplicity_sdk_2025.6.3/`) |
 |---:|---|
-| 65 | protocol/zigbee/app/framework/plugin/level-control/level-control.c (incl. switch level for occupancy, `note_switch_level()`; Daintree level range 1..254, level 0 = off) |
+| 65 | protocol/zigbee/app/framework/plugin/level-control/level-control.c (incl. switch level for occupancy, `note_switch_level()`; Daintree level range 1..255, level 0 = off) |
 | 19 | protocol/zigbee/app/framework/plugin/on-off/on-off.c |
 | 17 | protocol/zigbee/app/framework/plugin/ota-client/ota-client.c |
 | 15 | protocol/zigbee/app/framework/plugin/network-steering/network-steering-v2.c |

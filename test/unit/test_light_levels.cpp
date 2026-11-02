@@ -8,37 +8,38 @@ extern "C" {
 TEST(LightLevelMap, ZigbeeLevelsMapOntoMinToMax)
 {
     // min 20, max 200
-    EXPECT_EQ(200, light_level_map(254, 20, 200));
-    EXPECT_EQ(110, light_level_map(128, 20, 200));    // 20 + 127 * 180 / 253
+    EXPECT_EQ(200, light_level_map(255, 20, 200));
+    EXPECT_EQ(110, light_level_map(128, 20, 200));    // 20 + 127 * 180 / 254
+    EXPECT_EQ(199, light_level_map(254, 20, 200));    // 254 is not the top any more
     EXPECT_EQ(20, light_level_map(1, 20, 200));
 }
 
 TEST(LightLevelMap, LevelZeroIsOff)
 {
     EXPECT_EQ(0, light_level_map(0, 20, 200));
-    EXPECT_EQ(0, light_level_map(0, 0, 254));
+    EXPECT_EQ(0, light_level_map(0, 0, 255));
 }
 
 TEST(LightLevelMap, LevelOneNeverTurnsTheLightOff)
 {
-    EXPECT_EQ(1, light_level_map(1, 0, 254));         // Daintree default min is 0
-    EXPECT_EQ(3, light_level_map(1, 3, 254));         // the values Daintree writes
+    EXPECT_EQ(1, light_level_map(1, 0, 255));         // Daintree default min is 0
+    EXPECT_EQ(3, light_level_map(1, 3, 255));         // the values Daintree writes
 }
 
 TEST(LightLevelMap, DefaultRangeIsUnchanged)
 {
-    for(int level = 1; level <= 254; level++)
+    for(int level = 1; level <= 255; level++)
     {
-        EXPECT_EQ(level, light_level_map((uint8_t)level, 0, 254)) << level;
-        EXPECT_EQ(level, light_level_map((uint8_t)level, 1, 254)) << level;
+        EXPECT_EQ(level, light_level_map((uint8_t)level, 0, 255)) << level;
+        EXPECT_EQ(level, light_level_map((uint8_t)level, 1, 255)) << level;
     }
 }
 
 TEST(LightLevelMap, NeverOutsideMinMaxAndNeverGoesDown)
 {
-    for(int lo = 0; lo <= 254; lo += 7)
+    for(int lo = 0; lo <= 255; lo += 5)
     {
-        for(int hi = lo; hi <= 254; hi += 11)
+        for(int hi = lo; hi <= 255; hi += 5)
         {
             uint8_t last = 0;
             for(int level = 1; level <= 255; level++)
@@ -50,7 +51,7 @@ TEST(LightLevelMap, NeverOutsideMinMaxAndNeverGoesDown)
                 last = out;
             }
             EXPECT_EQ(lo < 1 ? 1 : lo, light_level_map(1, (uint8_t)lo, (uint8_t)hi));
-            EXPECT_EQ(hi < 1 ? 1 : hi, light_level_map(254, (uint8_t)lo, (uint8_t)hi));
+            EXPECT_EQ(hi < 1 ? 1 : hi, light_level_map(255, (uint8_t)lo, (uint8_t)hi));
         }
     }
 }
@@ -58,7 +59,7 @@ TEST(LightLevelMap, NeverOutsideMinMaxAndNeverGoesDown)
 TEST(LightLevelMap, MaxBelowMinUsesMin)
 {
     EXPECT_EQ(100, light_level_map(1, 100, 50));
-    EXPECT_EQ(100, light_level_map(254, 100, 50));
+    EXPECT_EQ(100, light_level_map(255, 100, 50));
 }
 
 /* --------------------------------------------------------------- colour split */

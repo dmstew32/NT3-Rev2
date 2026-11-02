@@ -43,7 +43,7 @@ static uint8_t _min_level_on_off = (DEFAULT_MIN_LIGHT_LEVEL_DT-1);
 static bool dimming_button_active = false;
 static bool level_cmd_from_network = false;   // the running level command came from a switch / gateway
 
-// Daintree: levels 1..254 (mapped onto Daintree's min..max when driving the
+// Daintree: levels 1..255 (mapped onto Daintree's min..max when driving the
 // light), level 0 = off.  Others: _min_level (25) .. max, below = off.
 #define MIN_LEVEL level_control_min_level()
 #define MIN_LEVEL_ON_OFF level_control_off_level()

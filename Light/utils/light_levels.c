@@ -17,12 +17,8 @@ uint8_t light_level_map(uint8_t level, uint8_t min_level, uint8_t max_level)
   {
      hi = lo;
   }
-  if(LIGHT_LEVEL_ZIGBEE_MAX <= level)
-  {
-     return(hi);
-  }
-  // Rounded straight line: 1 -> lo, 254 -> hi
-  return((uint8_t)(lo + (((uint32_t)(level - 1) * (uint32_t)(hi - lo)) + 126UL) / 253UL));
+  // Rounded straight line: 1 -> lo, 255 -> hi
+  return((uint8_t)(lo + (((uint32_t)(level - 1) * (uint32_t)(hi - lo)) + 127UL) / 254UL));
 }
 
 uint8_t light_pwm_share(uint8_t output_level, float ratio)
