@@ -22,7 +22,7 @@ static const sl_zigbee_aps_frame_t _apsFrame = {
      .destinationEndpoint = SL_ZIGBEE_BROADCAST_ENDPOINT,
      .options =  SL_ZIGBEE_APS_OPTION_NONE,
      .groupId = 0x0000,   /* Set below */
-     .radius = ADAPTIV_MAX_HOPS
+     .radius = GROUP_MULTICAST_RADIUS
 };
 
 // Common call for individual multicasts
@@ -51,7 +51,7 @@ static bool tx_multicast(sl_zigbee_aps_frame_t *apsFrame, uint8_t *message, uint
      apsFrame->groupId = device_binding_info.group_address;
 
      status = sl_zigbee_send_multicast(apsFrame,
-                                       ADAPTIV_MAX_HOPS,         // radius
+                                       GROUP_MULTICAST_RADIUS,   // radius
                                        SL_ZIGBEE_RX_ON_WHEN_IDLE_BROADCAST_ADDRESS,  // broadcastAddr
                                        SL_ZIGBEE_NULL_NODE_ID,   // alias
                                        0,                        // nwkSequence

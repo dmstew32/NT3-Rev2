@@ -427,10 +427,12 @@ void inc_reset_counter(void)
 
 void sl_zigbee_af_basic_reset_to_factory_defaults_cb(uint8_t endpoint)
 {
-  for(uint8_t ep = 1; ep < sl_zigbee_af_endpoint_count(); ep++)
+  for(uint8_t ep = 1; ep <= sl_zigbee_af_endpoint_count(); ep++)
   {
      sl_zigbee_af_reset_attributes(ep);
   }
+  write_firmware_version();
+  write_date_version();
 }
 
 // Read f/w ver from this code download and write the attribute
@@ -438,8 +440,8 @@ void write_firmware_version(void)
 {
   char data[32] = {0};
 
-  data[0] = strlen(APP_FIRMWARE_VERSION);
-  strcpy(&data[1], APP_FIRMWARE_VERSION);
+  data[0] = strlen(APP_VERSION_STR);
+  strcpy(&data[1], APP_VERSION_STR);
 
   if(SL_ZIGBEE_ZCL_STATUS_SUCCESS != sl_zigbee_af_write_server_attribute(
                                          LIGHT_ENDPOINT,

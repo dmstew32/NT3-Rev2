@@ -17,6 +17,7 @@
 #include "adaptiv_config.h"
 #include "light_on_off.h"
 #include "light_sensor.h"
+#include "broadcast_monitor.h"
 
 #include "sl_zigbee_debug_print.h"
 
@@ -314,30 +315,40 @@ static uint8_t grp_current_level(void *ctx)
   return(get_present_light_level());
 }
 
-static void grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t state,
+static bool grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t state,
                                occ_keepalive_reason_t reason, uint8_t level)
 {
   (void)ctx;
-  tx_occ_keepalive(time_s, (uint8_t)state, (uint8_t)reason, level);
+  bool sent = tx_occ_keepalive(time_s, (uint8_t)state, (uint8_t)reason, level);
   #if (OCC_PRINT >= 1)
-  sl_zigbee_app_debug_println("OCC TX keepalive %s %d s lvl:%d   <%d>",
-                              (OCC_KEEPALIVE_WAKE == reason) ? "wake" : "refresh", time_s, level, get_time_ms());
+  sl_zigbee_app_debug_println("OCC TX keepalive %s %d s lvl:%d%s   <%d>",
+                              (OCC_KEEPALIVE_WAKE == reason) ? "wake" : "refresh", time_s, level,
+                              sent ? "" : " FAILED", get_time_ms());
   #endif
+  return(sent);
 }
 
-static void grp_send_level_change(void *ctx, occ_group_state_t state, uint8_t level)
+static bool grp_send_level_change(void *ctx, occ_group_state_t state, uint8_t level)
 {
   (void)ctx;
-  tx_occ_level_change((uint8_t)state, level);
+  bool sent = tx_occ_level_change((uint8_t)state, level);
   #if (OCC_PRINT >= 1)
-  sl_zigbee_app_debug_println("OCC TX level change %d lvl:%d   <%d>", state, level, get_time_ms());
+  sl_zigbee_app_debug_println("OCC TX level change %d lvl:%d%s   <%d>", state, level,
+                              sent ? "" : " FAILED", get_time_ms());
   #endif
+  return(sent);
 }
 
 static uint32_t grp_random_ms(void *ctx, uint32_t max_ms)
 {
   (void)ctx;
   return(get_random_number(max_ms, 0UL));
+}
+
+static bool grp_broadcast_traffic_heavy(void *ctx)
+{
+  (void)ctx;
+  return(BROADCASTING_HEAVY == broadcast_monitor_get_traffic());
 }
 
 static const occ_group_ops_t occ_group_ops =
@@ -351,6 +362,7 @@ static const occ_group_ops_t occ_group_ops =
   .send_keepalive = grp_send_keepalive,
   .send_level_change = grp_send_level_change,
   .random_ms = grp_random_ms,
+  .broadcast_traffic_heavy = grp_broadcast_traffic_heavy,
 };
 
 // Every light starts ON with a full timer and sends nothing
@@ -491,13 +503,15 @@ void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd)
   uint16_t length = (cmd->bufLen > cmd->payloadStartIndex) ? (uint16_t)(cmd->bufLen - cmd->payloadStartIndex) : 0U;
   uint32_t now_ms = get_time_ms();
 
+  bool own = (cmd->source == sl_zigbee_get_node_id());   // our own multicast, looped back
+
   if(eADAPTIV_NWK != get_present_network())
   {
      return;
   }
-  if(cmd->source == sl_zigbee_get_node_id())
+  if(own && (ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID != cmd->commandId))
   {
-     return;     // our own multicast
+     return;     // only our own wake matters (occ_group_rx_own_keepalive)
   }
   if(is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
   {
@@ -517,11 +531,20 @@ void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd)
      }
      uint16_t time_s = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
      #if (OCC_PRINT >= 1)
-     sl_zigbee_app_debug_println(">>OCC [0x%04X] keepalive %s %d s lvl:%d   <%d>", cmd->source,
-                                 payload[3] ? "refresh" : "wake", time_s, payload[4], now_ms);
+     sl_zigbee_app_debug_println(">>OCC [0x%04X]%s keepalive %s %d s lvl:%d   <%d>", cmd->source,
+                                 own ? " (own)" : "", payload[3] ? "refresh" : "wake", time_s, payload[4], now_ms);
      #endif
-     occ_group_rx_keepalive(&occ_group, now_ms, time_s, (occ_group_state_t)payload[2],
-                            (occ_keepalive_reason_t)payload[3]);
+     if(own)
+     {
+        // Our wake is back: go ON together with the group
+        occ_group_rx_own_keepalive(&occ_group, now_ms, time_s, (occ_group_state_t)payload[2],
+                                   (occ_keepalive_reason_t)payload[3]);
+     }
+     else
+     {
+        occ_group_rx_keepalive(&occ_group, now_ms, time_s, (occ_group_state_t)payload[2],
+                               (occ_keepalive_reason_t)payload[3]);
+     }
   }
   else
   {

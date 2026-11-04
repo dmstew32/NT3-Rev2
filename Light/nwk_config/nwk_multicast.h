@@ -1,7 +1,7 @@
 #ifndef NWK_MULTICAST_H_
 #define NWK_MULTICAST_H_
 
-#define ADAPTIV_MAX_HOPS  3
+#define GROUP_MULTICAST_RADIUS  3   // hops: group multicasts stay close to the sender
 
 bool tx_move_to_new_light_level(uint8_t level, uint16_t xtion_time);
 bool tx_occ_sensor_new_delays(uint16_t delay_unoccupied, uint16_t delay_to_off);

@@ -222,7 +222,7 @@ sensor is off (delay 0) or during calibration.
 | Event | What happens |
 |---|---|
 | Motion while ON | Restart own timer. Nothing sent. |
-| Motion while MID or OFF | Light goes ON at once (to the wake level), and a **wake** keepalive goes out within 0–300 ms (cancelled if another light's wake arrives first). |
+| Motion while MID or OFF | A **wake** keepalive goes out at once, at the sensor sample that saw the motion (`OCC_GROUP_WAKE_BACKOFF_MS` = 0). Lights that are already on when they see the person send nothing, so usually only the first one or two lights to see someone send a wake. The light that saw the motion does **not** turn on by itself: it goes ON (to the wake level) when its own wake comes back from the stack, the same moment the rest of the group receives it, so the group comes on together. If the stack accepted the wake but it does not come back within 500 ms, the light goes ON anyway. If the wake cannot be sent at all (held or refused, see "Busy network"), the light stays where it is, like the rest of the group; another light that sees the motion will try too. |
 | Near the end of the ON timer (last 60 s, or timeout/4 if shorter) | One light sends a **refresh** keepalive with its remaining time, at a random point in the first 2/3 of that window. Others cancel theirs and sync their timers to it. |
 | A light has more than the margin (window/4, 15 s) more time left than a received refresh | It replies within 0–5 s with its own (longer) time: someone near it is still there. The group syncs to the longer time and stays on. |
 | ON timer expires | Random 0–5 s wait, then the light dims to mid and sends **level change MID**, unless another light's command arrives first (then it follows that). A light that missed the command changes on its own timer anyway. |
@@ -239,6 +239,17 @@ level returns to max.
 **Message count (simulation):** a vacant group sends about one refresh, one
 dim and one off multicast per vacancy cycle. While occupied, about two
 multicasts per dim period (one refresh and one reply).
+
+**Busy network:** these multicasts go out with a radius of 3 hops
+(`GROUP_MULTICAST_RADIUS`). If the stack refuses one (for example, the
+broadcast table is full), the light tries again about once a second (±250 ms),
+up to 5 attempts (about 4 s). While broadcast traffic is heavy (60% or more of
+the broadcast table in use), the first 3 attempts are held and the last 2 are
+sent anyway. A light whose level change is held does not dim or turn off until
+the command really goes out. A message from another light that arrives during
+the wait still cancels this light's message, so a busy network does not make
+every light in the group send its own copy (10 lights with heavy traffic,
+simulated: still about one refresh, one dim and one off per cycle).
 
 **Special cases (Adaptiv):**
 

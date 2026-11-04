@@ -1,11 +1,12 @@
 #ifndef _NT_3_APP_H_
 #define _NT_3_APP_H_
 
+#include "app_version.h"
+
 /****************       FIRMWARE VERSION       ****************/
 // NOTE: Check Debug_PRINT below
-#define APP_FIRMWARE_VERSION_U32 0x00010104 /* OTA Version */
-#define APP_FIRMWARE_VERSION "010104"       /* Attribute version */
-#define APP_DATE_VERSION "26.13.06"
+#define APP_FIRMWARE_VERSION_U32 APP_VERSION_U32
+#define APP_DATE_VERSION "26.30.10"
 
 
 #define LIGHT_ENDPOINT  (1)

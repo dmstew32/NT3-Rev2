@@ -5,7 +5,8 @@
 #   make flash    program the firmware (.s37) with Simplicity Commander
 #                 more than one adapter connected:  make flash SERIALNO=440322302
 #   make ota      create the .gbl and .ota upgrade files (like scripts/postbuild.cmd);
-#                 the firmware version is read from NT_3_app.h
+#                 the firmware version is read from Light/app_version.h
+#   make version  show the version make ota will use
 #   make test     PC tests: button equivalence test (test/buttons) and unit tests
 #                 (test/unit); needs MSYS2 MinGW gcc, python and CMake
 #
@@ -29,9 +30,18 @@ KEYS_DIR    ?= keys
 # OTA image header values (see scripts/postbuild.cmd)
 MFG_ID      ?= 0x1574
 IMAGE_TYPE  ?= 0x0002
-APP_VERSION  = $(shell sed -n 's/^\#define APP_FIRMWARE_VERSION_U32 *\(0x[0-9A-Fa-f]*\).*/\1/p' NT_3_app.h)
 
-.PHONY: build clean flash ota test check-build-dir
+# Firmware version: Light/app_version.h is the one place it is set.  The OTA
+# version is APP_VERSION_U32 there: (MAJOR << 16) + (MINOR << 8) + BUILD.
+VERSION_H    = Light/app_version.h
+version_field = $(shell sed -n 's/^\#define APP_VERSION_$(1)  *\([0-9][0-9]*\).*/\1/p' $(VERSION_H))
+APP_VERSION_MAJOR := $(call version_field,MAJOR)
+APP_VERSION_MINOR := $(call version_field,MINOR)
+APP_VERSION_BUILD := $(call version_field,BUILD)
+APP_VERSION := $(if $(and $(APP_VERSION_MAJOR),$(APP_VERSION_MINOR),$(APP_VERSION_BUILD)),$\
+  $(shell printf '0x%08X' $$(( ($(APP_VERSION_MAJOR) << 16) + ($(APP_VERSION_MINOR) << 8) + $(APP_VERSION_BUILD) ))))
+
+.PHONY: build clean flash ota test check-build-dir version
 
 build: check-build-dir
 	cd "$(BUILD_DIR)" && $(MAKE) -j$(JOBS) all
@@ -47,7 +57,7 @@ flash:
 
 ota:
 	@test -f "$(IMAGE).s37" || { echo "No $(IMAGE).s37 - run 'make build' first"; exit 1; }
-	@test -n "$(APP_VERSION)" || { echo "APP_FIRMWARE_VERSION_U32 not found in NT_3_app.h"; exit 1; }
+	@test -n "$(APP_VERSION)" || { echo "APP_VERSION_MAJOR/MINOR/BUILD not found in $(VERSION_H)"; exit 1; }
 	@test -f "$(KEYS_DIR)/signing-key" || { echo "No $(KEYS_DIR)/signing-key"; exit 1; }
 	@echo "OTA version $(APP_VERSION), manufacturer $(MFG_ID), image type $(IMAGE_TYPE)"
 	# unencrypted gbl and ota, for use with old bootloaders
@@ -59,6 +69,9 @@ ota:
 		--sign "$(KEYS_DIR)/signing-key" --encrypt "$(KEYS_DIR)/encryption-key"
 	"$(COMMANDER)" ota create --upgrade-image "$(IMAGE).gbl" --manufacturer-id $(MFG_ID) \
 		--image-type $(IMAGE_TYPE) --firmware-version $(APP_VERSION) --string "rel" -o "$(IMAGE).ota"
+
+version:
+	@echo "$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_BUILD) = $(APP_VERSION)  ($(VERSION_H))"
 
 # Unit tests: CMake + GoogleTest with the MSYS2 MinGW gcc.  CMAKE_SH: the
 # "MinGW Makefiles" generator otherwise refuses to run with Studio's sh.exe on PATH.

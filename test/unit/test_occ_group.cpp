@@ -43,6 +43,11 @@ struct Light
     std::function<void(const Msg &)> sent;              // network
     std::vector<std::pair<uint32_t, occ_group_state_t>> moves;   // go_to_state calls
     uint32_t *clock = nullptr;
+    std::function<bool()> stack_accepts = [] { return true; };   // false: the stack refuses the send
+    std::function<bool()> traffic_heavy = [] { return false; };  // broadcast traffic
+    std::vector<uint32_t> refused;                               // times of refused sends
+    bool loopback = true;                                        // the stack hands our own multicast back
+    std::vector<Msg> looped;                                     // ... waiting to be delivered
 };
 
 static uint32_t l_dim(void *c) { return static_cast<Light *>(c)->dim_ms; }
@@ -50,23 +55,42 @@ static uint32_t l_off(void *c) { return static_cast<Light *>(c)->off_ms; }
 static void l_go(void *c, occ_group_state_t s) { Light *l = static_cast<Light *>(c); l->moves.push_back({ *l->clock, s }); }
 static uint8_t l_level_for(void *, occ_group_state_t s) { return OCC_GROUP_ON == s ? WAKE_LEVEL : (OCC_GROUP_MID == s ? MID_LEVEL : 0); }
 static uint8_t l_current(void *) { return PRESENT_LEVEL; }
-static void l_keepalive(void *c, uint16_t t, occ_group_state_t s, occ_keepalive_reason_t r, uint8_t lvl)
+static bool l_send(Light *l, const Msg &m)
 {
-    Light *l = static_cast<Light *>(c);
-    l->sent({ true, t, s, r, lvl, l->id, *l->clock });
+    if(!l->stack_accepts()) { l->refused.push_back(*l->clock); return false; }
+    l->sent(m);
+    if(l->loopback) { l->looped.push_back(m); }
+    return true;
 }
-static void l_level_change(void *c, occ_group_state_t s, uint8_t lvl)
+static bool l_keepalive(void *c, uint16_t t, occ_group_state_t s, occ_keepalive_reason_t r, uint8_t lvl)
 {
     Light *l = static_cast<Light *>(c);
-    l->sent({ false, 0, s, OCC_KEEPALIVE_WAKE, lvl, l->id, *l->clock });
+    return l_send(l, { true, t, s, r, lvl, l->id, *l->clock });
+}
+static bool l_level_change(void *c, occ_group_state_t s, uint8_t lvl)
+{
+    Light *l = static_cast<Light *>(c);
+    return l_send(l, { false, 0, s, OCC_KEEPALIVE_WAKE, lvl, l->id, *l->clock });
 }
 static uint32_t l_random(void *c, uint32_t max) { return static_cast<Light *>(c)->random(max); }
+static bool l_heavy(void *c) { return static_cast<Light *>(c)->traffic_heavy(); }
+
+// Our own multicast, back from the stack
+static void deliver_looped(Light &l, uint32_t now)
+{
+    std::vector<Msg> msgs;
+    msgs.swap(l.looped);
+    for(const Msg &m : msgs)
+    {
+        if(m.keepalive) { occ_group_rx_own_keepalive(&l.g, now, m.time_s, m.state, m.reason); }
+    }
+}
 
 static void setup_light(Light &l, int id, uint32_t *clock)
 {
     l.id = id;
     l.clock = clock;
-    l.ops = { &l, l_dim, l_off, l_go, l_level_for, l_current, l_keepalive, l_level_change, l_random };
+    l.ops = { &l, l_dim, l_off, l_go, l_level_for, l_current, l_keepalive, l_level_change, l_random, l_heavy };
     occ_group_init(&l.g, &l.ops, *clock);
 }
 
@@ -91,6 +115,7 @@ protected:
         while((int32_t)(until - now) > 0)
         {
             now += std::min<uint32_t>(75, until - now);
+            deliver_looped(l, now);                    // loopback arrives by the next sample
             occ_group_tick(&l.g, now);
         }
     }
@@ -198,21 +223,103 @@ TEST_F(OccGroup, AnotherReplyThatIsLongEnoughCancelsOurs)
     EXPECT_TRUE(out.empty());
 }
 
-TEST_F(OccGroup, OccupancyAtMidWakesTheLightAtOnceAndTheGroupSoonAfter)
+TEST_F(OccGroup, OccupancyAtMidWakesTheGroupAndThisLightComesOnWithIt)
 {
     run_for(30 * MIN_MS + 5100);                       // MID now
     ASSERT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));
     out.clear(); l.moves.clear();
     backoff_fraction = 100;
     occ_group_on_occupancy(&l.g, now);
-    ASSERT_EQ(1u, l.moves.size());
-    EXPECT_EQ(OCC_GROUP_ON, l.moves[0].second);        // this light: immediately
+    EXPECT_TRUE(l.moves.empty());                      // not on its own
     EXPECT_TRUE(out.empty());
-    run_for(300);
-    ASSERT_EQ(1u, out.size());                         // the group: within 300 ms
+    uint32_t seen = now;
+    while(out.empty() && (now - seen) <= OCC_GROUP_WAKE_BACKOFF_MS + 75)
+    {
+        l.loopback = false;                            // hold the loopback back for a moment ...
+        run_for(75);
+    }
+    ASSERT_EQ(1u, out.size());                         // the group: within the wake backoff
     EXPECT_EQ(OCC_KEEPALIVE_WAKE, out[0].reason);
     EXPECT_EQ(WAKE_LEVEL, out[0].level);
-    EXPECT_NEAR(30 * 60, out[0].time_s, 1);
+    EXPECT_EQ(30 * 60, out[0].time_s);                 // a full ON timer
+    EXPECT_TRUE(l.moves.empty());                      // still waiting for its own wake
+    occ_group_rx_own_keepalive(&l.g, now, out[0].time_s, out[0].state, out[0].reason);   // ... it comes back
+    ASSERT_EQ(1u, l.moves.size());
+    EXPECT_EQ(OCC_GROUP_ON, l.moves[0].second);
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_NEAR(30 * MIN_MS, occ_group_remaining_ms(&l.g, now), 100);
+    run_for(MIN_MS);
+    EXPECT_EQ(1u, out.size());                         // one wake, no more
+    EXPECT_EQ(1u, l.moves.size());
+}
+
+TEST_F(OccGroup, MoreOccupancyWhileWakingDoesNotRestartTheWake)
+{
+    run_for(30 * MIN_MS + 5100);
+    out.clear(); l.moves.clear();
+    backoff_fraction = 100;
+    occ_group_on_occupancy(&l.g, now);
+    for(int i = 0; i < 3; i++) { run_for(75); occ_group_on_occupancy(&l.g, now); }
+    run_for(150);                                      // 300 ms after the first sample
+    EXPECT_EQ(1u, out.size());
+}
+
+TEST_F(OccGroup, WakeSentButNotHeardBackStillTurnsTheLightOn)
+{
+    run_for(30 * MIN_MS + 5100);
+    out.clear(); l.moves.clear();
+    l.loopback = false;
+    occ_group_on_occupancy(&l.g, now);
+    run_for(75);
+    ASSERT_EQ(1u, out.size());                         // the group has it
+    uint32_t sent_at = out[0].at;
+    run_to(sent_at + OCC_GROUP_OWN_WAKE_WAIT_MS - 75);
+    EXPECT_TRUE(l.moves.empty());
+    run_to(sent_at + OCC_GROUP_OWN_WAKE_WAIT_MS + 75);
+    ASSERT_EQ(1u, l.moves.size());                     // on with the group anyway
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_NEAR(30 * MIN_MS - OCC_GROUP_OWN_WAKE_WAIT_MS, occ_group_remaining_ms(&l.g, now), 150);  // the group's timer
+}
+
+TEST_F(OccGroup, LateOwnWakeAfterTheLightIsOnChangesNothing)
+{
+    run_for(30 * MIN_MS + 5100);
+    l.moves.clear();
+    l.loopback = false;
+    occ_group_on_occupancy(&l.g, now);
+    run_for(OCC_GROUP_OWN_WAKE_WAIT_MS + 150);         // on by the fallback
+    ASSERT_EQ(1u, l.moves.size());
+    uint32_t left = occ_group_remaining_ms(&l.g, now);
+    occ_group_rx_own_keepalive(&l.g, now, 30 * 60, OCC_GROUP_ON, OCC_KEEPALIVE_WAKE);
+    EXPECT_EQ(1u, l.moves.size());
+    EXPECT_EQ(left, occ_group_remaining_ms(&l.g, now));
+}
+
+TEST_F(OccGroup, OwnRefreshOrLevelChangeComingBackChangesNothing)
+{
+    occ_group_rx_own_keepalive(&l.g, now, 20, OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH);
+    EXPECT_EQ(30 * MIN_MS, occ_group_remaining_ms(&l.g, now));
+    occ_group_external_off(&l.g);
+    occ_group_rx_own_keepalive(&l.g, now, 20, OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH);
+    EXPECT_EQ(OCC_GROUP_OFF, occ_group_state(&l.g));   // only our wake turns us on
+    EXPECT_TRUE(l.moves.empty());
+}
+
+TEST_F(OccGroup, ExpiryWhileWakingWaitsForTheWake)
+{
+    // MID with 1 s of its off timer left when someone walks in; the stack is full
+    run_for(30 * MIN_MS + 5100);
+    ASSERT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));
+    while(occ_group_remaining_ms(&l.g, now) > 1000) { run_for(75); }
+    ASSERT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));
+    out.clear(); l.moves.clear();
+    l.stack_accepts = [] { return false; };
+    occ_group_on_occupancy(&l.g, now);
+    run_for(3000);                                     // the MID timer ran out meanwhile
+    EXPECT_TRUE(out.empty());
+    EXPECT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));   // the wake is still being tried
+    run_for(10000);                                    // the wake gave up: the timer decides again
+    EXPECT_EQ(OCC_GROUP_OFF, occ_group_state(&l.g));
 }
 
 TEST_F(OccGroup, AWakeFromAnotherLightCancelsOurs)
@@ -331,6 +438,159 @@ TEST_F(OccGroup, WorksAcrossTheMillisecondClockWrap)
     ASSERT_EQ(2u, out.size());
 }
 
+/* --------------------------------------------------------------- send retries */
+// MID, then occupancy: a wake goes out after the backoff (backoff_fraction 50: 150 ms,
+// retries exactly 1 s apart)
+class OccGroupRetry : public OccGroup
+{
+protected:
+    uint32_t t0 = 0;
+    int refuse = 0;                    // refuse this many sends, then accept (-1: always)
+
+    void SetUp() override
+    {
+        OccGroup::SetUp();
+        l.stack_accepts = [this] { if(0 == refuse) { return true; } if(refuse > 0) { refuse--; } return false; };
+        run_for(30 * MIN_MS + 5100);
+        out.clear(); l.moves.clear();
+        backoff_fraction = 50;
+    }
+    void walk_in() { t0 = now; occ_group_on_occupancy(&l.g, now); }
+};
+
+TEST_F(OccGroupRetry, RefusedSendIsTriedAgainAboutOnceASecondWithAFreshTime)
+{
+    refuse = 2;
+    walk_in();
+    run_for(5000);
+    ASSERT_EQ(2u, l.refused.size());
+    EXPECT_NEAR(t0 + 150, l.refused[0], 75);
+    EXPECT_NEAR(1000, l.refused[1] - l.refused[0], 75);
+    ASSERT_EQ(1u, out.size());
+    EXPECT_NEAR(1000, out[0].at - l.refused[1], 75);
+    EXPECT_EQ(OCC_KEEPALIVE_WAKE, out[0].reason);
+    EXPECT_EQ(30 * 60, out[0].time_s);                 // the light is not on yet: a full timer
+    EXPECT_TRUE(l.moves.size() == 1u && OCC_GROUP_ON == l.moves[0].second);   // on once it went out
+    EXPECT_GE(l.moves[0].first, out[0].at);
+}
+
+TEST_F(OccGroupRetry, RetriesAreSpreadByTheJitter)
+{
+    refuse = 1;
+    walk_in();
+    backoff_fraction = 0;                              // retry at 1000 - 250 ms
+    run_for(3000);
+    ASSERT_EQ(1u, out.size());
+    EXPECT_NEAR(750, out[0].at - l.refused[0], 75);
+}
+
+TEST_F(OccGroupRetry, GivesUpAfterFiveAttemptsInAboutFourSeconds)
+{
+    refuse = -1;
+    walk_in();
+    run_for(10000);
+    ASSERT_EQ(5u, l.refused.size());
+    EXPECT_NEAR(4000 + 150, l.refused[4] - l.refused[0], 150);   // each attempt up to one 75 ms tick late
+    EXPECT_TRUE(out.empty());
+    EXPECT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));   // the group never heard: this light stays with it
+    EXPECT_TRUE(l.moves.empty());
+}
+
+TEST_F(OccGroupRetry, AnotherLightsWakeDuringTheRetryCancelsIt)
+{
+    refuse = -1;
+    walk_in();
+    run_for(500);
+    ASSERT_EQ(1u, l.refused.size());
+    EXPECT_TRUE(l.moves.empty());
+    occ_group_rx_keepalive(&l.g, now, 30 * 60, OCC_GROUP_ON, OCC_KEEPALIVE_WAKE);
+    ASSERT_EQ(1u, l.moves.size());                     // on with the group
+    run_for(10000);
+    EXPECT_EQ(1u, l.refused.size());                   // no more attempts
+}
+
+TEST_F(OccGroupRetry, HeavyTrafficHoldsTheFirstThreeAttemptsThenSends)
+{
+    l.traffic_heavy = [] { return true; };
+    walk_in();
+    run_to(t0 + 150 + 3000 - 75);
+    EXPECT_TRUE(out.empty());
+    run_for(400);                                      // attempts land on the 75 ms sensor ticks
+    ASSERT_EQ(1u, out.size());                         // 4th attempt: sent anyway
+    EXPECT_NEAR(t0 + 150 + 3000 + 150, out[0].at, 150);
+    EXPECT_EQ(30 * 60, out[0].time_s);
+    EXPECT_TRUE(l.moves.empty() || l.moves[0].first >= out[0].at);   // dark until the group is woken
+}
+
+TEST_F(OccGroupRetry, SendsAtTheNextAttemptOnceTrafficIsLighter)
+{
+    l.traffic_heavy = [this] { return (now - t0) < 1500; };
+    walk_in();
+    run_for(5000);
+    ASSERT_EQ(1u, out.size());
+    EXPECT_NEAR(t0 + 2150 + 75, out[0].at, 150);       // held at 150 and 1150 ms
+}
+
+TEST_F(OccGroupRetry, HeavyTrafficAndAFullStackGivesUpAfterTheLastTwoAttempts)
+{
+    l.traffic_heavy = [] { return true; };
+    refuse = -1;
+    walk_in();
+    run_for(10000);
+    EXPECT_EQ(2u, l.refused.size());                   // attempts 4 and 5 reached the stack
+    EXPECT_TRUE(out.empty());
+}
+
+TEST_F(OccGroup, RefusedLevelChangeMovesTheLightOnceAndIsRetried)
+{
+    backoff_fraction = 50;
+    uint32_t start = now;
+    run_to(start + 30 * MIN_MS - 1000);                // the refresh has gone out
+    out.clear();
+    int refuse = 1;
+    l.stack_accepts = [&refuse] { if(refuse > 0) { refuse--; return false; } return true; };
+    run_to(start + 30 * MIN_MS + 2600);                // expiry backoff 2.5 s
+    ASSERT_EQ(1u, l.refused.size());
+    ASSERT_EQ(1u, l.moves.size());
+    EXPECT_EQ(OCC_GROUP_MID, l.moves[0].second);
+    run_for(1100);
+    ASSERT_EQ(1u, out.size());
+    EXPECT_FALSE(out[0].keepalive);
+    EXPECT_EQ(OCC_GROUP_MID, out[0].state);
+    EXPECT_EQ(1u, l.moves.size());                     // not moved again
+}
+
+TEST_F(OccGroup, HeldLevelChangeMovesTheLightOnlyWhenSent)
+{
+    backoff_fraction = 50;
+    uint32_t start = now;
+    run_to(start + 30 * MIN_MS - 1000);
+    out.clear();
+    l.traffic_heavy = [] { return true; };
+    run_to(start + 30 * MIN_MS + 2500 + 3000 - 75);
+    EXPECT_TRUE(l.moves.empty());
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    run_for(400);                                      // attempts land on the 75 ms sensor ticks
+    ASSERT_EQ(1u, l.moves.size());
+    ASSERT_EQ(1u, out.size());
+    EXPECT_EQ(OCC_GROUP_MID, out[0].state);
+}
+
+TEST_F(OccGroup, HeldLevelChangeFollowsALevelChangeFromAnotherLight)
+{
+    backoff_fraction = 50;
+    uint32_t start = now;
+    run_to(start + 30 * MIN_MS - 1000);
+    out.clear();
+    l.traffic_heavy = [] { return true; };
+    run_to(start + 30 * MIN_MS + 3000);                // ours is held
+    occ_group_rx_level_change(&l.g, now, OCC_GROUP_MID);
+    ASSERT_EQ(1u, l.moves.size());
+    run_for(10000);
+    EXPECT_TRUE(out.empty());                          // ours was cancelled
+    EXPECT_EQ(1u, l.moves.size());
+}
+
 /* =============================================================== part 2: group simulation */
 struct Sim
 {
@@ -342,6 +602,9 @@ struct Sim
     std::vector<int> in_flight_to;
     std::vector<Msg> all_sent;
     double loss = 0.0;
+    std::function<bool(uint32_t)> heavy;       // broadcast traffic heavy at time t
+    std::function<bool(uint32_t)> stack_full;  // the stack refuses every send at time t
+    int refused = 0;
 
     Sim(int n, uint32_t seed, uint32_t dim_ms = 30 * MIN_MS, uint32_t off_ms = 5 * MIN_MS) : rng(seed), lights(n)
     {
@@ -351,6 +614,9 @@ struct Sim
             l.dim_ms = dim_ms; l.off_ms = off_ms;
             l.random = [this](uint32_t max) { return max ? (uint32_t)(rng() % (max + 1)) : 0; };
             l.sent = [this](const Msg &m) { send(m); };
+            l.traffic_heavy = [this] { return heavy && heavy(now); };
+            l.stack_accepts = [this] { if(stack_full && stack_full(now)) { refused++; return false; } return true; };
+            l.loopback = false;                                     // send() models it
             setup_light(l, i, &now);
             phase.push_back((rng() % 15) * 5);                      // on the 5 ms simulation step
         }
@@ -360,10 +626,16 @@ struct Sim
         all_sent.push_back(m);
         for(size_t j = 0; j < lights.size(); j++)
         {
-            if((int)j == m.from) { continue; }                     // own message: rejected by the receiver
-            if(std::uniform_real_distribution<>(0, 1)(rng) < loss) { continue; }
             Msg d = m;
-            d.at = now + 20 + rng() % 280;                          // 20-300 ms over 3 hops
+            if((int)j == m.from)
+            {
+                d.at = now + 5;                                     // own message: the stack's loopback
+            }
+            else
+            {
+                if(std::uniform_real_distribution<>(0, 1)(rng) < loss) { continue; }
+                d.at = now + 20 + rng() % 280;                      // 20-300 ms over 3 hops
+            }
             in_flight.push_back(d);
             in_flight_to.push_back((int)j);
         }
@@ -388,8 +660,12 @@ struct Sim
                         printf("  rx t=%u light %d: %s time=%u  own state=%d left=%u pending=%d\n", now, to,
                                m.keepalive ? "keepalive" : "level", m.time_s, g->state, occ_group_remaining_ms(g, now), g->pending);
                     }
-                    if(m.keepalive) { occ_group_rx_keepalive(g, now, m.time_s, m.state, m.reason); }
-                    else            { occ_group_rx_level_change(g, now, m.state); }
+                    if(to == m.from)
+                    {
+                        if(m.keepalive) { occ_group_rx_own_keepalive(g, now, m.time_s, m.state, m.reason); }
+                    }
+                    else if(m.keepalive) { occ_group_rx_keepalive(g, now, m.time_s, m.state, m.reason); }
+                    else                 { occ_group_rx_level_change(g, now, m.state); }
                 }
                 else { k++; }
             }
@@ -572,4 +848,149 @@ TEST(OccGroupSim, ShortTestTimeoutsDoNotRefreshContinuously)
     printf("      30 s timeout, one occupied light, 10 min: %zu multicasts\n", s.all_sent.size());
     // A cycle is only 20-30 s here, so refresh + reply repeat about every 25 s
     EXPECT_LE(s.all_sent.size(), 100u);
+}
+
+/* --------------------------------------------------------------- busy network */
+// The case a send queue would make worse: nobody's message goes out at once, so
+// every light has one pending.  Held/retried messages stay cancellable here, so
+// the first one that goes out still stops the rest.
+TEST(OccGroupSim, HeavyTrafficVacantGroupStillDimsTogetherWithFewMessages)
+{
+    int refresh = 0, mid = 0, off = 0, runs = 20;
+    uint32_t worst_spread = 0;
+    for(int seed = 1; seed <= runs; seed++)
+    {
+        Sim s(10, 700 + seed);
+        s.heavy = [](uint32_t) { return true; };
+        uint32_t start = s.now;
+        s.run_to(start + 30 * MIN_MS + 10000);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_MID)) << "seed " << seed;
+        uint32_t sp = spread(s.first_move(OCC_GROUP_MID));
+        worst_spread = std::max(worst_spread, sp);
+        EXPECT_LE(sp, 1500u) << "seed " << seed;
+        s.run_to(start + 35 * MIN_MS + 20000);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_OFF)) << "seed " << seed;
+        refresh += s.count(true, OCC_KEEPALIVE_REFRESH);
+        mid += s.count(false, OCC_GROUP_MID);
+        off += s.count(false, OCC_GROUP_OFF);
+    }
+    printf("      10 lights, heavy traffic, %d runs: refresh %.2f  mid %.2f  off %.2f multicasts per run,"
+           " worst MID spread %u ms\n", runs, (double)refresh / runs, (double)mid / runs, (double)off / runs, worst_spread);
+    EXPECT_LE(refresh, runs * 2);
+    EXPECT_LE(mid, runs * 2);
+    EXPECT_LE(off, runs * 2);
+}
+
+TEST(OccGroupSim, HeavyTrafficWakeStillReachesEveryoneWithinFourSeconds)
+{
+    for(int seed = 1; seed <= 20; seed++)
+    {
+        Sim s(10, 800 + seed);
+        uint32_t start = s.now;
+        s.run_to(start + 36 * MIN_MS);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_OFF));
+        s.heavy = [](uint32_t) { return true; };
+        size_t before = s.all_sent.size();
+        uint32_t walk_in = s.now + 1000;
+        auto occ = [&](int i, uint32_t t) { return i < 3 && t >= walk_in + 50 * i && t < walk_in + 50 * i + 2000; };
+        s.run_to(walk_in + 5000, occ);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_ON)) << "seed " << seed;
+        std::vector<uint32_t> t = s.first_move(OCC_GROUP_ON, walk_in);
+        EXPECT_LE(*std::max_element(t.begin(), t.end()) - walk_in, 4000u) << "seed " << seed;
+        EXPECT_LE(s.all_sent.size() - before, 3u);     // still at most one per detecting light
+    }
+}
+
+TEST(OccGroupSim, StackFullForTwoSecondsTheWakeIsRetriedAndOnlyOneGoesOut)
+{
+    int wakes = 0, runs = 20;
+    for(int seed = 1; seed <= runs; seed++)
+    {
+        Sim s(10, 900 + seed);
+        uint32_t start = s.now;
+        s.run_to(start + 36 * MIN_MS);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_OFF));
+        size_t before = s.all_sent.size();
+        uint32_t walk_in = s.now + 1000;
+        s.stack_full = [walk_in](uint32_t t) { return t < walk_in + 2000; };
+        s.run_to(walk_in + 6000, [&](int i, uint32_t t) { return 0 == i && t >= walk_in && t < walk_in + 200; });
+        ASSERT_TRUE(s.all_in(OCC_GROUP_ON)) << "seed " << seed;
+        EXPECT_EQ(1u, s.all_sent.size() - before) << "seed " << seed;
+        EXPECT_GE(s.refused, 2);
+        wakes += (int)(s.all_sent.size() - before);
+    }
+    EXPECT_EQ(runs, wakes);
+}
+
+/* --------------------------------------------------------------- waking together */
+// The light that sees someone goes on when its own wake comes back from the
+// stack, so it is not ahead of the group by the wake backoff any more.
+TEST(OccGroupSim, TheDetectingLightComesOnWithTheGroupNotBeforeIt)
+{
+    uint32_t worst_lead = 0, worst_on = 0;
+    for(int seed = 1; seed <= 20; seed++)
+    {
+        Sim s(10, 1000 + seed);
+        uint32_t start = s.now;
+        s.run_to(start + 36 * MIN_MS);
+        ASSERT_TRUE(s.all_in(OCC_GROUP_OFF));
+        uint32_t walk_in = s.now + 1000;
+        s.run_to(walk_in + 3000, [&](int i, uint32_t t) { return 0 == i && t >= walk_in && t < walk_in + 200; });
+        ASSERT_TRUE(s.all_in(OCC_GROUP_ON)) << "seed " << seed;
+        std::vector<uint32_t> t = s.first_move(OCC_GROUP_ON, walk_in);
+        ASSERT_EQ(10u, t.size());
+        uint32_t detector = t[0];
+        uint32_t first_other = *std::min_element(t.begin() + 1, t.end());
+        uint32_t wake_at = 0;
+        for(const Msg &m : s.all_sent) { if(m.keepalive && OCC_KEEPALIVE_WAKE == m.reason && m.at >= walk_in) { wake_at = m.at; break; } }
+        ASSERT_NE(0u, wake_at);
+        EXPECT_GE(detector, wake_at) << "seed " << seed;          // not before the wake went out
+        EXPECT_LE(detector - wake_at, 75u) << "seed " << seed;    // on at its next sample after the loopback
+        worst_lead = std::max(worst_lead, (first_other > detector) ? first_other - detector : 0u);
+        worst_on = std::max(worst_on, *std::max_element(t.begin(), t.end()) - walk_in);
+    }
+    printf("      walk-in: detector ahead of the first other light by at most %u ms (radio time only); "
+           "all on within %u ms\n", worst_lead, worst_on);
+}
+
+TEST(OccGroupSim, IfTheWakeCannotBeSentNoLightComesOn)
+{
+    Sim s(10, 1100);
+    uint32_t start = s.now;
+    s.run_to(start + 36 * MIN_MS);
+    ASSERT_TRUE(s.all_in(OCC_GROUP_OFF));
+    uint32_t walk_in = s.now + 1000;
+    s.stack_full = [](uint32_t) { return true; };
+    s.run_to(walk_in + 10000, [&](int i, uint32_t t) { return 0 == i && t >= walk_in && t < walk_in + 200; });
+    EXPECT_TRUE(s.all_in(OCC_GROUP_OFF));              // the detecting light stays with the group
+    EXPECT_TRUE(s.first_move(OCC_GROUP_ON, walk_in).empty());
+    EXPECT_EQ(5, s.refused);                           // tried 5 times, then gave up
+}
+
+// Wake backoff trade-off: a person walks in under 3 lights whose sensors see
+// them up to 100 ms apart.  Fewer wakes with a longer backoff, sooner light
+// with a shorter one.  Prints the numbers; the limits only catch a regression.
+TEST(OccGroupSim, WakeBackoffTradeoff)
+{
+    int runs = 50, wakes = 0;
+    uint32_t total_on = 0, worst_on = 0;
+    for(int seed = 1; seed <= runs; seed++)
+    {
+        Sim s(10, 1200 + seed);
+        uint32_t start = s.now;
+        s.run_to(start + 36 * MIN_MS);
+        size_t before = s.all_sent.size();
+        uint32_t walk_in = s.now + 1000;
+        uint32_t offset[3] = { 0, (uint32_t)(s.rng() % 101), (uint32_t)(s.rng() % 101) };
+        s.run_to(walk_in + 3000, [&](int i, uint32_t t) { return i < 3 && t >= walk_in + offset[i] && t < walk_in + offset[i] + 2000; });
+        ASSERT_TRUE(s.all_in(OCC_GROUP_ON));
+        std::vector<uint32_t> t = s.first_move(OCC_GROUP_ON, walk_in);
+        uint32_t all_on = *std::max_element(t.begin(), t.end()) - walk_in;
+        total_on += all_on;
+        worst_on = std::max(worst_on, all_on);
+        wakes += (int)(s.all_sent.size() - before);
+    }
+    printf("      wake backoff %lu ms: %.2f wakes per walk-in (3 lights see it), all lights on after %u ms avg, %u ms worst\n",
+           (unsigned long)OCC_GROUP_WAKE_BACKOFF_MS, (double)wakes / runs, total_on / runs, worst_on);
+    EXPECT_LE(wakes, runs * 3);
 }

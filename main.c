@@ -54,6 +54,7 @@ int nodeMain(void)
 #include "hal_buttons.h"
 #include "button_actions.h"
 
+#include "app_version.h"
 #include "hal_light_sensor.h"
 #include "light_sensor.h"
 #include "hal_occ_sensor.h"
@@ -109,7 +110,7 @@ void app_init(void)
   sl_zigbee_set_radio_power(DEFAULT_RADIO_PWR);
   check_switch_network();
   init_sink_debug();
-  sl_zigbee_app_debug_println("} App init done v%s   <%d>\n", APP_FIRMWARE_VERSION, get_time_ms());
+  sl_zigbee_app_debug_println("} App init done v%s   <%d>\n", APP_VERSION_STR, get_time_ms());
   app_init_done_flag = true;
 
   // Start checking for on/off x5

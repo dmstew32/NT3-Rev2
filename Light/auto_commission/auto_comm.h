@@ -3,6 +3,7 @@
 
 void check_adaptiv_auto_commission(void);
 void adaptiv_group_added(bool addSub);
+void adaptiv_group_added_by_command(void);   // received Add Group: no level change
 bool auto_commission_incoming_cmd(sl_zigbee_af_cluster_command_t *cmd);
 
 void place_in_manual_add_into_group_mode(void);
