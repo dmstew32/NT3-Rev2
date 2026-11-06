@@ -54,6 +54,7 @@ int nodeMain(void)
 #include "hal_buttons.h"
 #include "button_actions.h"
 
+#include "app_version.h"
 #include "hal_light_sensor.h"
 #include "light_sensor.h"
 #include "hal_occ_sensor.h"
@@ -67,6 +68,7 @@ int nodeMain(void)
 #include "adaptiv_config.h"
 #include "nwk_groups.h"
 #include "sl_zigbee_debug_print.h"
+#include "ota_diag.h"
 
 static void power_event_occurred(sl_power_manager_em_t from, sl_power_manager_em_t to);
 void on_off_count_task(taskParm_t parm0, taskParm_t parm1);
@@ -109,7 +111,7 @@ void app_init(void)
   sl_zigbee_set_radio_power(DEFAULT_RADIO_PWR);
   check_switch_network();
   init_sink_debug();
-  sl_zigbee_app_debug_println("} App init done v%s   <%d>\n", APP_FIRMWARE_VERSION, get_time_ms());
+  sl_zigbee_app_debug_println("} App init done v%s   <%d>\n", APP_VERSION_STR, get_time_ms());
   app_init_done_flag = true;
 
   // Start checking for on/off x5
@@ -129,6 +131,10 @@ void app_init(void)
 void app_process_action(void)
 {
   pet_the_dog();
+
+#if (OTA_DIAG_ENABLED == 1)
+  ota_diag_main_loop(halCommonGetInt32uMillisecondTick());
+#endif
 
   taskerTick();
 

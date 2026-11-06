@@ -35,6 +35,7 @@
 #ifdef ADAPTIV_LIGHT
 
 extern void adaptiv_group_added(bool addSub);
+extern void adaptiv_group_added_by_command(void);
 #endif // ADAPTIV_LIGHT
 
 static uint8_t findGroupIndex(uint8_t endpoint, uint16_t groupId);
@@ -457,7 +458,8 @@ uint32_t sl_zigbee_af_groups_cluster_server_command_parse(sl_service_opcode_t op
       {
         status = sl_zigbee_af_groups_cluster_add_group_cb(cmd);
 #ifdef ADAPTIV_LIGHT
-        adaptiv_group_added(true);
+        // Received Add Group (e.g. Daintree gateway): leave the light level alone
+        adaptiv_group_added_by_command();
 #endif // ADAPTIV_LIGHT
         break;
       }

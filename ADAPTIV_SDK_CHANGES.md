@@ -27,7 +27,7 @@ changes: `grep -rn "ADAPTIV_LIGHT" simplicity_sdk_2025.6.3`.
 | 17 | protocol/zigbee/app/framework/plugin/ota-client/ota-client.c |
 | 15 | protocol/zigbee/app/framework/plugin/network-steering/network-steering-v2.c |
 | 11 | protocol/zigbee/app/framework/plugin/scenes/scenes.c |
-| 7 | protocol/zigbee/app/framework/plugin/groups-server/groups-server.c |
+| 7 | protocol/zigbee/app/framework/plugin/groups-server/groups-server.c (a received Add Group calls `adaptiv_group_added_by_command()`: no light level change; `manually_add_group()` for Adaptiv commissioning still calls `adaptiv_group_added(true)`, which goes to max) |
 | 7 | protocol/zigbee/app/framework/plugin/identify/identify.c |
 | 7 | protocol/zigbee/app/framework/util/util.c |
 | 4 | protocol/zigbee/stack/internal/src/baremetal/sl_zigbee_dynamic_commissioning_baremetal_wrapper.c |

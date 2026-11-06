@@ -18,6 +18,7 @@
 #include "app_leds.h"
 #include "button_actions.h"
 #include "fw_version_display.h"
+#include "ota_diag.h"
 
 #include "sl_zigbee_debug_print.h"
 
@@ -45,6 +46,8 @@
 #define MAX_BUT0_PRESSES_FOR_DIM_VALUES (6)
 #define MIN_BUT0_PRESSES_FOR_DIM_VALUES (1)
 #define MAX_BUT1_PRESSES_FOR_DIM_VALUES (0)
+
+#define N_BUT0_PRESSES_OTA_DIAG         (8)
 
 #define LIGHT_LEVEL_100_PERCENT    (255)
 #define LIGHT_LEVEL_80_PERCENT     ((80*255)/100)
@@ -252,6 +255,21 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   else if((N_BUT0_PRESSES_FW_VERSION == presses_t) && (N_BUT1_PRESSES_FW_VERSION == presses_d))
   {
      start_display_fw_version();
+  }
+  #endif
+  #if (OTA_DIAG_ENABLED == 1)
+  /******************  OTA DIAGNOSTICS (debug builds) ***********/
+  // Before the check below: has to work in any network, in a group or not.
+  else if((N_BUT0_PRESSES_OTA_DIAG == presses_t) && (0 == presses_d))
+  {
+     if(ota_diag_tx_send())
+     {
+        app_leds_show_presses(presses_t);
+     }
+     else
+     {
+        app_leds_show_fail();
+     }
   }
   #endif
   /**********************  YOU SHALL NOT PASS  *******************/

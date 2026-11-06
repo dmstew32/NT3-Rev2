@@ -746,6 +746,172 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<folderInfo id="com.silabs.ss.framework.project.toolchain.core.default#com.silabs.ss.tool.ide.arm.toolchain.gnu.cdt:12.2.1.20221205.737434821" name="/" resourcePath="Light">
+						<toolChain id="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.exe.977605359" name="Si32 GNU ARM" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.exe" unusedChildren="">
+							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.debug.level.895711753.2070618275" name="Debug Level" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.debug.level.895711753"/>
+							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.script.1362794053.1767950685" name="Linker Script:" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.script.1362794053"/>
+							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.usescript.1426968932.1033736187" name="Use custom linker script" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.usescript.1426968932"/>
+							<targetPlatform binaryParser="org.eclipse.cdt.core.ELF;org.eclipse.cdt.core.GNU_ELF" id="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.platform.base" isAbstract="false" name="Debug Platform" osList="win32,linux,macosx" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.platform.base"/>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.base.1929727465" name="GNU ARM C Compiler" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.base.1913972674">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.239598107" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/autogen}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/config/prioconf}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/config/zcl}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/auto_commission}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/hal}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/nwk_config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/nwk_mgmt}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/nwk_monitor}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/nwk_on_off}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/nwk_sensors}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/tasker}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/Device/SiliconLabs/EFR32MG21/Include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/bootloader}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/bootloader/api}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/bootloader/core/flash}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/plugin/byte_utilities}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/cli/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/cli/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/clock_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/clock_manager/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/CMSIS/Core/Include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/token_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/token_manager/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/token_manager/legacy/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/driver/debug/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/device_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emdrv/dmadrv/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emdrv/dmadrv/inc/s2_signals}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emdrv/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emlib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/driver/gpio/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/peripheral/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/hfxo_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/driver/i2cspm/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/interrupt_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/interrupt_manager/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/interrupt_manager/inc/arm}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/iostream/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/legacy_hal/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/legacy_hal_wdog/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/sl_mbedtls_support/config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/sl_mbedtls_support/config/preset}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/sl_mbedtls_support/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/third_party/mbedtls/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/third_party/mbedtls/library}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/memory_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/memory_manager/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emdrv/nvm3/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/emdrv/nvm3/config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/power_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/third_party/printf}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/third_party/printf/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/sl_psa_driver/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/driver/pwm/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/protocol/ble}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/protocol/ieee802154}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/protocol/wmbus}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/protocol/zwave}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/chip/efr32/efr32xg2x}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/protocol/sidewalk}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/rail_util_ieee802154}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/pa-conversions}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/pa-conversions/efr32xg21}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/rail_util_power_manager_init}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/rail_util_pti}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin/rail_util_rf_path}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/se_manager/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/sl_main/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/sl_main/src}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/sleeptimer/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/security/sl_component/sli_psec_osal/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/plugin/slot-manager}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/service/udelay/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/plugin/plugin-common/eeprom}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/plugin/plugin-afv6/eeprom}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/basic}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/platform/micro}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/util/serial}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/service-function}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/counters}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/framework}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/debug-print}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/diagnostic-server}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/internal/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/find-and-bind-initiator}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/find-and-bind-target}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/fragmentation}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/groups-server}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/identify}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/interpan}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/level-control}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/network-creator}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/network-creator-security}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/network-steering}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/on-off}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-bootload}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-client}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-client-policy}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-server-policy}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-storage-common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-storage-simple}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/ota-storage-simple-eeprom}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/reporting}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/scan-dispatch}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/scenes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/scenes-client}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/security}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/signature-decode}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/rail_lib/plugin}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/util/counters}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/zigbee}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/mac/rail_mux}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/platform/radio/mac}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/util/silicon_labs/silabs_core}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/core}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/mac}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/routing/zigbee}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/em260}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/stack/internal/src/ipc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/plugin/update-tc-link-key}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/util}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/security}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/util/zigbee-framework}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/framework/cli}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/util/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/simplicity_sdk_2025.6.3/protocol/zigbee/app/util/security}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/tx}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/rx}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/utils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/time}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/buttons}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/leds}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/Light/occupancy}&quot;"/>
+								</option>
+								<inputType id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.input.863005327" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.input"/>
+							</tool>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.compiler.base.286295164" name="GNU ARM C++ Compiler" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.compiler.base.171285480">
+								<inputType id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.compiler.input.1457287527" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+							</tool>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.assembler.base.245342264" name="GNU ARM Assembler" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.assembler.base.1995008611">
+								<inputType id="org.eclipse.cdt.core.asmSource.54924225" superClass="org.eclipse.cdt.core.asmSource"/>
+							</tool>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.base.1559600859" name="GNU ARM C Linker" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.base.1812016101"/>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.linker.base.494687897" name="GNU ARM C++ Linker" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.cpp.linker.base.2035212893"/>
+							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base.167511143" name="GNU ARM Archiver" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base.824382016"/>
+						</toolChain>
+					</folderInfo>
 					<sourceEntries>
 						<entry excluding="nwk_mgmt|hal|nwk_sensors|trashed_modified_files|NT-3-Light_cmake|NT-3-Light_iar_cmake|Light|test" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Light"/>

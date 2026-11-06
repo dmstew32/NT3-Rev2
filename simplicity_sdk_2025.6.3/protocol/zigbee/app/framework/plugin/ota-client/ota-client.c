@@ -55,6 +55,16 @@
 extern uint32_t get_time_ms(void);//JGR
 #endif // ADAPTIV_LIGHT
 
+#ifdef ADAPTIV_LIGHT
+#include "ota_diag.h"
+#if (OTA_DIAG_ENABLED == 1)
+// Download timing, see ota_diag.h.  Uses the stack millisecond tick, the clock
+// the OTA timer runs on.
+#define OTA_DIAG 1
+#define otaDiagNow() halCommonGetInt32uMillisecondTick()
+#endif
+#endif // ADAPTIV_LIGHT
+
 // TODO: SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_SET_IMAGE_STAMP is no longer a
 // plugin/component option
 #if defined(SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_SET_IMAGE_STAMP)        \
@@ -501,6 +511,11 @@ static bool setTimer(uint32_t timeMs)
                                                 pollControl,
                                                 sleepControl);
   }
+#ifdef OTA_DIAG
+  if ((currentBootloadState == BOOTLOAD_STATE_DOWNLOAD) && !waitingForResponse) {
+    ota_diag_timer_set(otaDiagNow(), timer);
+  }
+#endif
   return (timer != 0);
 }
 
@@ -554,6 +569,15 @@ static void otaClientTick(void)
   // Getting here means either we timed out our last operation,
   // or we need to kick off a periodic event.
 
+#ifdef OTA_DIAG
+  if (currentBootloadState == BOOTLOAD_STATE_DOWNLOAD) {
+    if (waitingForResponse) {
+      ota_diag_response_timeout();
+    } else {
+      ota_diag_timer_fired(otaDiagNow());
+    }
+  }
+#endif
   sli_zigbee_af_page_request_timer_expired();
 
   if (waitingForResponse) {
@@ -860,7 +884,7 @@ static void startServerDiscovery(void)
   if (discoverBusy) {
 #ifdef ADAPTIV_LIGHT
     otaPrintln("OTA Service discovery prevented - another is already in progress   <%d>", get_time_ms());
-    //return;
+    return;
 #else  // ADAPTIV_LIGHT
     otaPrintln("OTA Service discovery prevented - another is already in progress");
     return;
@@ -1053,6 +1077,12 @@ static void recordUpgradeStatus(BootloadState state)
                bootloadStateNames[state]);
 #endif // ADAPTIV_LIGHT
     sl_zigbee_af_core_flush();
+#ifdef OTA_DIAG
+    if (state == BOOTLOAD_STATE_DOWNLOAD) {
+      ota_diag_tx_download_start();
+    }
+    ota_diag_tx_set_bootload_state((uint8_t)state);
+#endif
   }
   currentBootloadState = state;
 
@@ -1615,6 +1645,11 @@ static void sendMessage(uint8_t cmdId, uint8_t upgradeEndStatus, uint32_t timer)
   sl_zigbee_af_response_aps_frame.options |= SL_ZIGBEE_APS_OPTION_RETRY;
   {
     sl_status_t status = sl_zigbee_af_send_command_unicast(SL_ZIGBEE_OUTGOING_DIRECT, serverNodeId);
+#ifdef OTA_DIAG
+    if (cmdId == ZCL_IMAGE_BLOCK_REQUEST_COMMAND_ID) {
+      ota_diag_request_sent(otaDiagNow(), (status == SL_STATUS_OK));
+    }
+#endif
     if (status != SL_STATUS_OK) {
       otaPrintln("Error:  Failed to send OTA command 0x%02X, status: 0x%02X",
                  cmdId, status);
@@ -1958,6 +1993,9 @@ static sl_zigbee_af_status_t imageBlockResponseParse(uint8_t* buffer, uint8_t in
     sl_zigbee_af_core_flush();
     otaPrintln("Download delay by server %d ms", calculatedTimerMs);
     sl_zigbee_af_core_flush();
+#ifdef OTA_DIAG
+    ota_diag_wait_for_data();
+#endif
     setTimer(calculatedTimerMs);
     // Abort the page request, else when the timer fires, it will be
     // misinterpreted as a page response timeout
@@ -2018,6 +2056,9 @@ static sl_zigbee_af_status_t imageBlockResponseParse(uint8_t* buffer, uint8_t in
                  "Image block response",
                  currentOffset,
                  offset);
+#ifdef OTA_DIAG
+      ota_diag_response_dropped();
+#endif
       return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
     }
   }
@@ -2028,6 +2069,9 @@ static sl_zigbee_af_status_t imageBlockResponseParse(uint8_t* buffer, uint8_t in
       || dataSize > MAX_CLIENT_DATA_SIZE) {
     otaPrintln("%s info did not match my expected info.  Dropping.",
                "Image block response");
+#ifdef OTA_DIAG
+    ota_diag_response_dropped();
+#endif
     return SL_ZIGBEE_ZCL_STATUS_INVALID_VALUE;
   }
 
@@ -2047,7 +2091,14 @@ static sl_zigbee_af_status_t imageBlockResponseParse(uint8_t* buffer, uint8_t in
     }
   }
 
+#ifdef OTA_DIAG
+  ota_diag_block_rx(otaDiagNow(), offset, dataSize, minBlockRequestPeriod);
+  bool stored = storeData(offset, dataSize, imageData);
+  ota_diag_block_written(otaDiagNow());
+  if (!stored) {
+#else
   if (!storeData(offset, dataSize, imageData)) {
+#endif
     otaPrintln("Failed to write to storage device!");
     downloadAndVerifyFinish(SL_ZIGBEE_AF_OTA_CLIENT_ABORTED);
     // The downloadAndVerifyFinish() function will return it's only status

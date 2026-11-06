@@ -3,6 +3,7 @@
 // The following is brought in by the endianness component, which all
 // applications must include
 #include "sl_endianness.h"
+#include "app_version.h"
 
 #ifndef SILABS_AF_ENDPOINT_CONFIG
 #define SILABS_AF_ENDPOINT_CONFIG 1
@@ -25,7 +26,7 @@
    0x07, 0xFF, 0xF8, 0x00, /* 125,DEFAULT value for cluster: Commissioning, attribute: channel mask, side: server */ \
    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, /* 129,DEFAULT value for cluster: Over the Air Bootloading, attribute: OTA Upgrade Server ID, side: client */ \
    0xFF, 0xFF, 0xFF, 0xFF, /* 137,DEFAULT value for cluster: Over the Air Bootloading, attribute: Offset (address) into the file, side: client */ \
-   0x00, 0x00, 0x00, 0x02, /* 141,DEFAULT value for cluster: Over the Air Bootloading, attribute: OTA Current File Version, side: client */ \
+	0, APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD, /* 141, */ \
 }
 #else //!BIGENDIAN_CPU
 #define ZCL_GENERATED_DEFAULTS { \
@@ -38,7 +39,7 @@
   0x00, 0xF8, 0xFF, 0x07,  /* 125,DEFAULT value for cluster: Commissioning, attribute: channel mask, side: server */ \
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  /* 129,DEFAULT value for cluster: Over the Air Bootloading, attribute: OTA Upgrade Server ID, side: client */ \
   0xFF, 0xFF, 0xFF, 0xFF,  /* 137,DEFAULT value for cluster: Over the Air Bootloading, attribute: Offset (address) into the file, side: client */ \
-  0x00, 0x00, 0x00, 0x02,  /* 141,DEFAULT value for cluster: Over the Air Bootloading, attribute: OTA Current File Version, side: client */ \
+	APP_VERSION_BUILD, APP_VERSION_MINOR, APP_VERSION_MAJOR, 0, /* 141, */ \
 }
 #endif
 
@@ -119,7 +120,7 @@
 		  { 0xFFFD, ZCL_INT16U_ATTRIBUTE_TYPE, 2, (0x00), { (uint8_t*)2  } }, /* 63 Cluster: Commissioning, Attribute: cluster revision, Side: server*/ \
 		  { 0x0000, ZCL_IEEE_ADDRESS_ATTRIBUTE_TYPE, 8, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)&(generatedDefaults[129]) } }, /* 64 Cluster: Over the Air Bootloading, Attribute: OTA Upgrade Server ID, Side: client*/ \
 	  { 0x0001, ZCL_INT32U_ATTRIBUTE_TYPE, 4, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)&(generatedDefaults[137]) } }, /* 65 Cluster: Over the Air Bootloading, Attribute: Offset (address) into the file, Side: client*/ \
-	  { 0x0002, ZCL_INT32U_ATTRIBUTE_TYPE, 4, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)APP_FIRMWARE_VERSION_U32 } }, /* 66 Cluster: Over the Air Bootloading, Attribute: OTA Current File Version, Side: client*/ \
+		{ 0x0002, ZCL_INT32U_ATTRIBUTE_TYPE, 4, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)&(generatedDefaults[141]) } },				/* 33 Cluster: Over the Air Bootloading, Attribute: OTA current file version, Side: client*/ \
 	  { 0x0003, ZCL_INT16U_ATTRIBUTE_TYPE, 2, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)82  } }, /* 67 Cluster: Over the Air Bootloading, Attribute: OTA Current ZigBee Stack Version, Side: client*/ \
 		  { 0x0006, ZCL_ENUM8_ATTRIBUTE_TYPE, 1, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)0x00  } }, /* 68 Cluster: Over the Air Bootloading, Attribute: OTA Upgrade Status, Side: client*/ \
 		  { 0x0007, ZCL_INT16U_ATTRIBUTE_TYPE, 2, (ATTRIBUTE_MASK_CLIENT), { (uint8_t*)0x1574  } }, /* 69 Cluster: Over the Air Bootloading, Attribute: Manufacturer ID, Side: client*/ \
@@ -168,7 +169,7 @@
 	  { 0x0008, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[32]), 8, 10, CLUSTER_MASK_SERVER, NULL }, /* 6, Endpoint Id: 1, Cluster: Level Control, Side: server*/ \
 	  { 0x0015, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[40]), 24, 79, CLUSTER_MASK_SERVER, NULL }, /* 7, Endpoint Id: 1, Cluster: Commissioning, Side: server*/ \
 	  { 0x0019, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[64]), 8, 25, CLUSTER_MASK_CLIENT, NULL }, /* 8, Endpoint Id: 1, Cluster: Over the Air Bootloading, Side: client*/ \
-	  { 0x0B05, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[83]), 2, 4, CLUSTER_MASK_SERVER, NULL }, /* 9, Endpoint Id: 1, Cluster: Diagnostics, Side: server*/ \
+	  { 0x0B05, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[83]), 2, 2, CLUSTER_MASK_SERVER, NULL }, /* 9, Endpoint Id: 1, Cluster: Diagnostics, Side: server*/ \
 	  { 0xFCAD, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[85]), 8, 12, CLUSTER_MASK_SERVER, NULL }, /* 10, Endpoint Id: 1, Cluster: Adaptiv Mfg Specific Cluster, Side: server*/ \
 	  { 0xFC01, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[93]), 3, 3, CLUSTER_MASK_SERVER, NULL }, /* 11, Endpoint Id: 1, Cluster: Daintree Cluster, Side: server*/ \
 	  { 0x0000, (sl_zigbee_af_attribute_metadata_t*)&(generatedAttributes[0]), 14, 0, CLUSTER_MASK_SERVER, NULL }, /* 12, Endpoint Id: 2, Cluster: Basic, Side: server*/ \
@@ -191,7 +192,7 @@
 // This is an array of sl_zigbee_af_endpoint_type_t structures.
 // [index],   # clusters/ep,   #bytes/ep
 #define ZCL_GENERATED_ENDPOINT_TYPES { \
-  { ((sl_zigbee_af_cluster_t*)&(generatedClusters[0])), 12, 155 }, \
+  { ((sl_zigbee_af_cluster_t*)&(generatedClusters[0])), 12, 153 }, \
 	  { ((sl_zigbee_af_cluster_t*)&(generatedClusters[12])), 6, 17 }, \
 	  { ((sl_zigbee_af_cluster_t*)&(generatedClusters[18])), 6, 15 }, \
 	 } 
@@ -202,7 +203,7 @@
 #define ZCL_ATTRIBUTE_SINGLETONS_SIZE (197)
 
 // Total size of attribute storage
-#define ZCL_ATTRIBUTE_MAX_SIZE (175)
+#define ZCL_ATTRIBUTE_MAX_SIZE (185)
 
 // Number of fixed endpoints	
 #define ZCL_FIXED_ENDPOINT_COUNT (3)
@@ -330,7 +331,7 @@
 // This is an array of sl_zigbee_af_manufacturer_code_entry_t structures for CLUSTERS.
 // Indexed into  ZCL_GENERATED_CLUSTERS
 // {index, mfg id}    index into ZCL_GENERATED_CLUSTERS
-#define ZCL_GENERATED_CLUSTER_MANUFACTURER_CODE_COUNT (2+2)
+#define ZCL_GENERATED_CLUSTER_MANUFACTURER_CODE_COUNT (2)
 #define ZCL_GENERATED_CLUSTER_MANUFACTURER_CODES { \
     { 10, 0x1574 },  \
     { 11, 0x103A },  \

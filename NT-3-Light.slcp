@@ -32,6 +32,9 @@ source:
 - {path: Light/nwk_mgmt/nwk_commission.c}
 - {path: Light/nwk_mgmt/nwk_groups.c}
 - {path: Light/nwk_mgmt/nwk_utils.c}
+- {path: Light/nwk_monitor/broadcast_monitor.c}
+- {path: Light/nwk_monitor/ota_diag.c}
+- {path: Light/nwk_monitor/ota_diag_tx.c}
 - {path: Light/nwk_on_off/light_on_off.c}
 - {path: Light/nwk_sensors/light_sensor.c}
 - {path: Light/nwk_sensors/occ_sensor.c}
@@ -80,6 +83,10 @@ include:
   - {path: nwk_commission.h}
   - {path: nwk_groups.h}
   - {path: nwk_utils.h}
+  - {path: ota_diag.h}
+- path: Light/nwk_monitor
+  file_list:
+  - {path: broadcast_monitor.h}
 - path: Light/nwk_on_off
   file_list:
   - {path: light_on_off.h}

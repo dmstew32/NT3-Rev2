@@ -53,18 +53,38 @@ static void start_timer(occ_group_t *g, uint32_t now_ms, uint32_t duration_ms)
 static void schedule(occ_group_t *g, occ_group_send_t what, uint32_t now_ms, uint32_t max_backoff_ms)
 {
   g->pending = what;
+  g->attempts = 0U;
   g->send_at_ms = now_ms + g->ops->random_ms(g->ops->ctx, max_backoff_ms);
 }
 
 static void cancel(occ_group_t *g)
 {
   g->pending = OCC_SEND_NONE;
+  g->attempts = 0U;
+}
+
+// The pending message was not sent (held or refused): try again in about a
+// second, or give up after the last attempt.
+static void retry_later(occ_group_t *g, uint32_t now_ms)
+{
+  g->attempts++;
+  if(g->attempts >= OCC_GROUP_SEND_ATTEMPTS)
+  {
+     cancel(g);
+     return;
+  }
+  g->send_at_ms = now_ms + (OCC_GROUP_RETRY_MS - OCC_GROUP_RETRY_JITTER_MS)
+                + g->ops->random_ms(g->ops->ctx, 2UL * OCC_GROUP_RETRY_JITTER_MS);
 }
 
 // Change state and move the light.  ON/MID start their timer, OFF has none.
 static void enter(occ_group_t *g, occ_group_state_t state, uint32_t now_ms)
 {
   g->state = state;
+  if(OCC_GROUP_ON == state)
+  {
+     g->own_wake_sent = false;    // on: nothing left to wait for
+  }
   switch(state)
   {
      case OCC_GROUP_ON:
@@ -91,33 +111,75 @@ static bool occupied_now(const occ_group_t *g, uint32_t now_ms)
   return(g->occupied_seen && !reached(now_ms, g->last_occupied_ms + OCC_GROUP_OCCUPIED_NOW_MS));
 }
 
+// Go ON with the group's timer (a wake was received, ours or another light's)
+static void wake_on(occ_group_t *g, uint32_t now_ms, uint32_t duration_ms)
+{
+  cancel(g);
+  enter(g, OCC_GROUP_ON, now_ms);
+  start_timer(g, now_ms, duration_ms);
+}
+
+// Send the pending message.  It stays pending (for a retry) if it was held for
+// heavy broadcast traffic or the stack refused it; any other outcome ends it.
 static void send_pending(occ_group_t *g, uint32_t now_ms)
 {
   const occ_group_ops_t *ops = g->ops;
   occ_group_send_t what = g->pending;
   uint32_t left = occ_group_remaining_ms(g, now_ms);
+  bool sent = true;
 
-  g->pending = OCC_SEND_NONE;
+  // Held: nothing happens yet (a level change does not move this light either,
+  // so the group still moves together when the command goes out)
+  if((g->attempts < OCC_GROUP_HEAVY_HOLD_ATTEMPTS) && ops->broadcast_traffic_heavy(ops->ctx))
+  {
+     retry_later(g, now_ms);
+     return;
+  }
+
   switch(what)
   {
      case OCC_SEND_WAKE:
-        ops->send_keepalive(ops->ctx, to_seconds(left), OCC_GROUP_ON, OCC_KEEPALIVE_WAKE,
-                            ops->level_for_state(ops->ctx, OCC_GROUP_ON));
+     {
+        // Not ON yet (the light waits for the group): announce a full ON timer
+        uint32_t wake_ms = (OCC_GROUP_ON == g->state) ? left : ops->dim_timeout_ms(ops->ctx);
+        sent = ops->send_keepalive(ops->ctx, to_seconds(wake_ms), OCC_GROUP_ON, OCC_KEEPALIVE_WAKE,
+                                   ops->level_for_state(ops->ctx, OCC_GROUP_ON));
+        if(sent && (OCC_GROUP_ON != g->state))
+        {
+           g->own_wake_sent = true;
+           g->own_wake_wait_ms = now_ms + OCC_GROUP_OWN_WAKE_WAIT_MS;
+           g->own_wake_expires_ms = now_ms + wake_ms;
+        }
         break;
+     }
      case OCC_SEND_REFRESH:
      case OCC_SEND_REPLY:
         if((OCC_GROUP_ON == g->state) && (0UL != left))
         {
-           ops->send_keepalive(ops->ctx, to_seconds(left), OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH,
-                               ops->current_level(ops->ctx));
+           sent = ops->send_keepalive(ops->ctx, to_seconds(left), OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH,
+                                      ops->current_level(ops->ctx));
         }
         break;
      case OCC_SEND_LEVEL_CHANGE:
-        enter(g, g->pending_state, now_ms);
-        ops->send_level_change(ops->ctx, g->pending_state, ops->level_for_state(ops->ctx, g->pending_state));
+        // Move on the first real attempt, not again on a retry
+        if(g->state != g->pending_state)
+        {
+           enter(g, g->pending_state, now_ms);
+        }
+        sent = ops->send_level_change(ops->ctx, g->pending_state,
+                                      ops->level_for_state(ops->ctx, g->pending_state));
         break;
      default:
         break;
+  }
+
+  if(sent)
+  {
+     cancel(g);
+  }
+  else
+  {
+     retry_later(g, now_ms);
   }
 }
 
@@ -127,6 +189,8 @@ void occ_group_init(occ_group_t *g, const occ_group_ops_t *ops, uint32_t now_ms)
   g->ops = ops;
   g->state = OCC_GROUP_ON;
   g->pending = OCC_SEND_NONE;
+  g->attempts = 0U;
+  g->own_wake_sent = false;
   g->occupied_seen = false;
   g->last_occupied_ms = now_ms;
   start_timer(g, now_ms, ops->dim_timeout_ms(ops->ctx));
@@ -145,9 +209,10 @@ void occ_group_on_occupancy(occ_group_t *g, uint32_t now_ms)
         cancel(g);    // no longer about to expire
      }
   }
-  else
+  else if((OCC_SEND_WAKE != g->pending) && !g->own_wake_sent)
   {
-     enter(g, OCC_GROUP_ON, now_ms);
+     // Wake the group; this light goes ON when the wake comes back (or another
+     // light's wake arrives first).  Already waking: nothing more to do.
      schedule(g, OCC_SEND_WAKE, now_ms, OCC_GROUP_WAKE_BACKOFF_MS);
   }
 }
@@ -159,6 +224,16 @@ void occ_group_tick(occ_group_t *g, uint32_t now_ms)
   if((OCC_SEND_NONE != g->pending) && reached(now_ms, g->send_at_ms))
   {
      send_pending(g, now_ms);
+  }
+  if(g->own_wake_sent && reached(now_ms, g->own_wake_wait_ms))
+  {
+     // The group has our wake but it never came back to us: go ON with the group
+     uint32_t left_ms = reached(now_ms, g->own_wake_expires_ms) ? 0UL : (g->own_wake_expires_ms - now_ms);
+     g->own_wake_sent = false;
+     if(OCC_GROUP_ON != g->state)
+     {
+        wake_on(g, now_ms, left_ms);
+     }
   }
   if(!g->timer_running)
   {
@@ -177,8 +252,9 @@ void occ_group_tick(occ_group_t *g, uint32_t now_ms)
      }
   }
 
-  // Expired: change level after a backoff unless another light's command comes first
-  if(0UL == left)
+  // Expired: change level after a backoff unless another light's command comes first.
+  // Not while waking the group: the wake decides (if it fails, this runs next tick).
+  if((0UL == left) && (OCC_SEND_WAKE != g->pending) && !g->own_wake_sent)
   {
      g->timer_running = false;
      g->pending_state = (OCC_GROUP_ON == g->state) ? OCC_GROUP_MID : OCC_GROUP_OFF;
@@ -201,9 +277,7 @@ void occ_group_rx_keepalive(occ_group_t *g, uint32_t now_ms, uint16_t time_s,
   if(OCC_GROUP_ON != g->state)
   {
      // A light in the group has occupancy (wake) or outlasted our timer (refresh)
-     cancel(g);
-     enter(g, OCC_GROUP_ON, now_ms);
-     start_timer(g, now_ms, received_ms);
+     wake_on(g, now_ms, received_ms);
      return;
   }
 
@@ -270,9 +344,21 @@ void occ_group_rx_level_change(occ_group_t *g, uint32_t now_ms, occ_group_state_
   enter(g, state, now_ms);
 }
 
+void occ_group_rx_own_keepalive(occ_group_t *g, uint32_t now_ms, uint16_t time_s,
+                                occ_group_state_t state, occ_keepalive_reason_t reason)
+{
+  // Our wake came back: the group has it now, go ON with it.  Anything else we
+  // sent changes nothing here (we already acted on it).
+  if((OCC_KEEPALIVE_WAKE == reason) && (OCC_GROUP_ON == state) && (OCC_GROUP_ON != g->state))
+  {
+     wake_on(g, now_ms, (uint32_t)time_s * 1000UL);
+  }
+}
+
 void occ_group_external_on(occ_group_t *g, uint32_t now_ms)
 {
   cancel(g);
+  g->own_wake_sent = false;
   g->state = OCC_GROUP_ON;
   start_timer(g, now_ms, g->ops->dim_timeout_ms(g->ops->ctx));
 }
@@ -280,6 +366,7 @@ void occ_group_external_on(occ_group_t *g, uint32_t now_ms)
 void occ_group_external_off(occ_group_t *g)
 {
   cancel(g);
+  g->own_wake_sent = false;
   g->state = OCC_GROUP_OFF;
   g->timer_running = false;
 }

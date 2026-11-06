@@ -86,7 +86,9 @@ static void stop_auto_commission(bool go_max_level)
   sl_zigbee_app_debug_println("AUTO Commish STOP!!");
 }
 
-// Called when a group has been added or removed
+// Called when a group has been added or removed.  Adding a group ends Adaptiv
+// auto commissioning / manual group mode (manually_add_group()): the light goes
+// to max.
 void adaptiv_group_added(bool addSub)
 {
   sl_zigbee_app_debug_println("NT-3 Group %s", addSub ? "ADDED" : "DELETED");
@@ -96,6 +98,16 @@ void adaptiv_group_added(bool addSub)
      // Added to a group
      stop_auto_commission(true);
   }
+}
+
+// Called when an Add Group command is received (e.g. from a Daintree gateway).
+// Same as adaptiv_group_added(true), but the light level is left alone: only
+// Adaptiv commissioning goes to max.
+void adaptiv_group_added_by_command(void)
+{
+  sl_zigbee_app_debug_println("NT-3 Group ADDED by command");
+  update_bindingTable_address();
+  stop_auto_commission(false);
 }
 
 // parm0 = time stamp, parm1 = delay

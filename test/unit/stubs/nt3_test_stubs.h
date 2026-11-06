@@ -76,6 +76,7 @@ typedef uint8_t sl_zigbee_af_attribute_type_t;
 #define ZA_MAX_HOPS 12
 typedef uint8_t sl_zigbee_af_zcl_request_status_t;
 typedef uint8_t sl_zigbee_incoming_message_type_t;
+#define SL_ZIGBEE_INCOMING_UNICAST  0u
 typedef struct
 {
   sl_zigbee_aps_frame_t *apsFrame;
@@ -195,6 +196,24 @@ sl_zigbee_af_status_t sl_zigbee_af_write_server_attribute(uint8_t endpoint, uint
 sl_status_t sl_token_get_data(uint32_t token, uint32_t index, void *data, uint32_t length);
 sl_status_t sl_token_set_data(uint32_t token, uint32_t index, void *data, uint32_t length);
 #define TOKEN_APP_UNOCCUPIED_DELAY  0x1001u
+#define TOKEN_APP_ADAPTIV_COMMISH_INFO  0x1002u
+typedef struct
+{
+  uint8_t enable_byte;
+  uint8_t options_byte;
+  uint8_t src_ep;
+  uint16_t src_short_addr;
+  uint16_t session_id;
+  uint16_t group_id;
+  uint32_t auto_time_out;
+} adaptiv_commish_info_t;     // config/sl_custom_token_header.h
+
+// auto commissioning (light_on_off.h, nwk_groups.h, micro.h, nwk_multicast.h)
+void dim_lights_up_down(uint16_t cycles, uint16_t ramp_Dsecs);
+bool are_lights_dimming_up_dowm(void);
+void update_bindingTable_address(void);
+uint8_t halGetResetInfo(void);
+sl_status_t broadcast_autocommission_announce(void);
 
 /* ---------------------------------------------------------------- prints */
 void sl_zigbee_af_core_println(const char *format, ...);

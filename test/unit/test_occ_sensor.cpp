@@ -13,6 +13,7 @@ extern "C" {
 #include "zap-id.h"
 #include "../../Light/nwk_sensors/occ_sensor.h"
 #include "occ_group.h"
+#include "broadcast_monitor.h"
 void suspend_occ_sensor_control(uint16_t Dsecs);
 bool is_occ_mid_or_lower(void);
 }
@@ -63,6 +64,7 @@ FAKE_VALUE_FUNC(sl_802154_short_addr_t, sl_zigbee_af_get_node_id);
 FAKE_VALUE_FUNC(sl_zigbee_network_status_t, sl_zigbee_af_network_state);
 FAKE_VALUE_FUNC(sl_status_t, sl_zigbee_send_multicast, sl_zigbee_aps_frame_t *, uint8_t, uint16_t, sl_802154_short_addr_t,
                 uint8_t, uint16_t, uint8_t, const uint8_t *, uint8_t *);
+FAKE_VALUE_FUNC(broadcast_traffic_t, broadcast_monitor_get_traffic);
 FAKE_VALUE_FUNC(sl_status_t, sl_zigbee_af_send_broadcast, sl_802154_short_addr_t, sl_802154_short_addr_t, uint8_t,
                 sl_zigbee_aps_frame_t *, uint16_t, uint8_t *);
 }
@@ -80,6 +82,10 @@ static taskParm_t m_task_p0, m_task_p1;
 
 struct Air { sl_zigbee_aps_frame_t aps; uint16_t bcast; uint8_t radius; std::vector<uint8_t> bytes; uint32_t at; };
 static std::vector<Air> m_air;
+static int m_refuse;                           // the stack refuses this many multicasts
+static std::vector<uint32_t> m_refused;
+static bool m_loopback;                        // the stack hands our own multicast back ...
+static std::vector<std::vector<uint8_t>> m_looped;   // ... at the next sample
 struct Move { uint8_t level; uint32_t at; };
 static std::vector<Move> m_moves;
 static std::vector<uint32_t> m_offs;
@@ -100,7 +106,14 @@ static void multicast_info(uint8_t, device_binding_info_t *i) { i->group_address
 static sl_status_t send_multicast(sl_zigbee_aps_frame_t *aps, uint8_t radius, uint16_t bcast, sl_802154_short_addr_t, uint8_t,
                                   uint16_t, uint8_t len, const uint8_t *msg, uint8_t *)
 {
+    if(m_refuse > 0)
+    {
+        m_refuse--;
+        m_refused.push_back(m_now);
+        return SL_STATUS_ZIGBEE_MAX_MESSAGE_LIMIT_REACHED;     // broadcast table full
+    }
     m_air.push_back({ *aps, bcast, radius, std::vector<uint8_t>(msg, msg + len), m_now });
+    if(m_loopback) { m_looped.push_back(std::vector<uint8_t>(msg, msg + len)); }
     return SL_STATUS_OK;
 }
 
@@ -112,6 +125,8 @@ protected:
         RESET_FAKE(get_present_network); RESET_FAKE(move_to_level_onoff); RESET_FAKE(sl_zigbee_af_on_off_cluster_off_cb);
         RESET_FAKE(clear_off_from_switch); RESET_FAKE(clear_on_from_switch); RESET_FAKE(restore_unoccupied_delay);
         RESET_FAKE(sl_zigbee_send_multicast); RESET_FAKE(hal_start_occ_sensor); RESET_FAKE(hal_stop_occ_sensor);
+        RESET_FAKE(broadcast_monitor_get_traffic);
+        broadcast_monitor_get_traffic_fake.return_val = BROADCASTING_LIGHT;
         FFF_RESET_HISTORY();
         get_present_network_fake.return_val = eADAPTIV_NWK;
         get_time_ms_fake.custom_fake = now;
@@ -148,6 +163,8 @@ protected:
         m_flags = 0; m_delay_s = 600; m_off_s = 300; m_grouped = true;
         m_off_from_switch = m_on_from_switch = false; m_random_pct = 0; m_task = NULL;
         m_air.clear(); m_moves.clear(); m_offs.clear();
+        m_refuse = 0; m_refused.clear();
+        m_loopback = true; m_looped.clear();
         occ_sensor_init();
         run_task();
     }
@@ -162,8 +179,19 @@ protected:
         for(uint32_t end = m_now + ms; (int32_t)(end - m_now) > 0;)
         {
             m_now += 75;
+            deliver_loopback();
             occ_sensor_logic(occupied ? occupied(m_now) : false);
             if(m_task && (m_now - m_task_p0.u32) >= m_task_p1.u32) { run_task(); }
+        }
+    }
+    // our own multicasts, back from the stack (source = this node)
+    static void deliver_loopback(void)
+    {
+        std::vector<std::vector<uint8_t>> msgs;
+        msgs.swap(m_looped);
+        for(const std::vector<uint8_t> &b : msgs)
+        {
+            rx(b[4], std::vector<uint8_t>(b.begin() + 5, b.end()), MY_NODE);
         }
     }
     static void rx(uint8_t command, std::vector<uint8_t> payload, sl_802154_short_addr_t from = OTHER_NODE)
@@ -259,6 +287,42 @@ TEST_F(OccSensor, MinLevelAboveZeroAlsoStaysAtMid)
     EXPECT_TRUE(m_offs.empty());
     samples(10000);
     EXPECT_TRUE(is_occ_mid_or_lower());                // still "off" (at mid), not flipped back on
+}
+
+TEST_F(OccSensor, WakeRefusedByTheStackIsSentAgainAboutASecondLater)
+{
+    rx_off();
+    samples(1000);
+    m_random_pct = 50;                                 // retry exactly 1 s later
+    m_refuse = 1;
+    samples(75, always);
+    samples(2000);
+    ASSERT_EQ(1u, m_refused.size());
+    ASSERT_EQ(1u, m_air.size());
+    EXPECT_NEAR(1000, m_air[0].at - m_refused[0], 75);
+    EXPECT_EQ(OCC_KEEPALIVE_WAKE, m_air[0].bytes[8]);
+    EXPECT_EQ(3, m_air[0].radius);                     // GROUP_MULTICAST_RADIUS
+    EXPECT_NEAR(599, m_air[0].bytes[5] | (m_air[0].bytes[6] << 8), 1);   // time when really sent
+    ASSERT_EQ(1u, m_moves.size());                     // the light came on when its wake went out ...
+    EXPECT_GE(m_moves[0].at, m_air[0].at);             // ... not when the first attempt was refused
+}
+
+TEST_F(OccSensor, HeavyBroadcastTrafficHoldsTheWake)
+{
+    rx_off();
+    samples(1000);
+    m_random_pct = 50;
+    broadcast_monitor_get_traffic_fake.return_val = BROADCASTING_HEAVY;
+    uint32_t t0 = m_now;
+    samples(75, always);
+    samples(2900);
+    EXPECT_TRUE(m_air.empty());                        // held 3 times ...
+    EXPECT_TRUE(m_moves.empty());                      // ... and the light waits with the group
+    samples(600);
+    ASSERT_EQ(1u, m_air.size());                       // ... then sent anyway
+    EXPECT_NEAR(t0 + 3150, m_air[0].at, 300);
+    ASSERT_EQ(1u, m_moves.size());                     // on with the group
+    EXPECT_GE(m_moves[0].at, m_air[0].at);
 }
 
 /* --------------------------------------------------------------- receiving */
@@ -388,6 +452,7 @@ TEST_F(OccSensor, ManualOnModeStillWakesFromMid)
     samples(3000);
     m_moves.clear();
     samples(75, always);
+    samples(150);                                      // wake out, back at the next sample
     ASSERT_EQ(1u, m_moves.size());
     EXPECT_EQ(204, m_moves[0].level);
 }
@@ -411,6 +476,7 @@ TEST_F(OccSensor, ThreeHoursOffResetsTheWakeLevelToMax)
     samples(3 * 60 * 60 * 1000 + 1000);
     EXPECT_EQ(204, m_on_level);
     samples(75, always);
+    samples(150);
     ASSERT_EQ(1u, m_moves.size());
     EXPECT_EQ(204, m_moves[0].level);
 }
@@ -442,4 +508,42 @@ TEST_F(OccSensor, OccupancyWhileOnSendsNothing)
     samples(30 * 60 * 1000, always);
     EXPECT_TRUE(m_air.empty());
     EXPECT_TRUE(m_moves.empty());
+}
+
+/* --------------------------------------------------------------- waking with the group */
+TEST_F(OccSensor, DetectingLightComesOnWhenItsOwnWakeComesBack)
+{
+    rx_off();
+    samples(1000);
+    m_air.clear();
+    samples(75, always);                               // sees someone; wake goes out (backoff 0)
+    ASSERT_EQ(1u, m_air.size());
+    EXPECT_EQ(OCC_KEEPALIVE_WAKE, m_air[0].bytes[8]);
+    EXPECT_EQ(600, m_air[0].bytes[5] | (m_air[0].bytes[6] << 8));   // a full ON timer
+    EXPECT_TRUE(m_moves.empty());                      // not on its own
+    samples(75);                                       // the wake comes back
+    ASSERT_EQ(1u, m_moves.size());
+    EXPECT_EQ(204, m_moves[0].level);
+    EXPECT_FALSE(is_occ_mid_or_lower());
+}
+
+TEST_F(OccSensor, WakeThatCannotBeSentLeavesTheLightOff)
+{
+    rx_off();
+    samples(1000);
+    m_refuse = 100;                                    // broadcast table full throughout
+    samples(75, always);
+    samples(10000);
+    EXPECT_EQ(5u, m_refused.size());                   // tried, then gave up
+    EXPECT_TRUE(m_air.empty());
+    EXPECT_TRUE(m_moves.empty());                      // stays off with the group
+    EXPECT_TRUE(is_occ_mid_or_lower());
+}
+
+TEST_F(OccSensor, OwnLevelChangeComingBackIsStillIgnored)
+{
+    samples(600 * 1000 + 150);                         // refresh, then dim to MID (loopback on)
+    ASSERT_EQ(2u, m_air.size());
+    ASSERT_EQ(1u, m_moves.size());                     // moved once, by its own timer
+    EXPECT_EQ(51, m_moves[0].level);
 }

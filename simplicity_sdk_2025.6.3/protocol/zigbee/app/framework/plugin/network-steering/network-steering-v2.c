@@ -407,7 +407,10 @@ void sli_zigbee_af_network_steering_stack_status_callback(sl_status_t status)
     if (keystatus == SL_STATUS_OK
         && sl_zigbee_sec_man_compare_key_to_value(&context, (sl_zigbee_sec_man_key_t*)&defaultLinkKey)
         && status == SL_STATUS_NETWORK_UP) {
+#ifndef ADAPTIV_LIGHT
+      // DS - disable the pesky Verify Key Request updates and the Node Descriptor unicast to the coordinator - we don't need these
       sl_zigbee_af_update_tc_link_key_set_delay(jitterTimeDelayMs());
+#endif
     } else if (status == SL_STATUS_NETWORK_DOWN) {
       sl_zigbee_af_update_tc_link_key_set_inactive();
     }
@@ -893,7 +896,7 @@ void sl_zigbee_af_update_tc_link_key_status_cb(sl_zigbee_key_status_t keyStatus)
       default:
         // Failure!
 #ifdef ADAPTIV_LIGHT
-        #ifdef NO_LEAVE_ON_TC_LINK_FAILURE
+        #ifndef NO_LEAVE_ON_TC_LINK_FAILURE
         sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_NO_OPTION);
         #endif
 #else  // ADAPTIV_LIGHT
