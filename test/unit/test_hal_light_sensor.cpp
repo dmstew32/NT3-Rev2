@@ -9,7 +9,6 @@ extern "C" {
 #include "em_i2c.h"
 #include "hal_light_sensor.h"
 void start_reading_light_sensor(void);
-void start_reading_light_sensor_for_calibration(void);
 void stop_reading_light_sensor(void);
 }
 
@@ -216,18 +215,6 @@ TEST_F(HalLightSensor, StoppingDuringAReadingRestoresGreen)
     EXPECT_EQ(1u, app_leds_green_lux_done_fake.call_count);
 }
 
-TEST_F(HalLightSensor, CalibrationReadsFasterWithTheSameGreenOffTime)
-{
-    stop_reading_light_sensor();
-    m_green_off_ms.clear();
-    start_reading_light_sensor_for_calibration();
-    run_until(m_now + 10 * LIGHT_SENSOR_CAL_SAMPLE_TIME_MS + 180);
-    EXPECT_EQ(11u, m_green_off_ms.size());
-    for(uint32_t ms : m_green_off_ms)
-    {
-        EXPECT_LE(ms, 200u);
-    }
-}
 
 TEST_F(HalLightSensor, AverageGoesToTheLogicOnceTheBufferIsFull)
 {
@@ -285,11 +272,3 @@ TEST_F(HalLightSensor, GreenOffMeansEverySampleIsARealReading)
     EXPECT_EQ(3u, app_leds_green_off_for_lux_fake.call_count);
 }
 
-TEST_F(HalLightSensor, CalibrationAlwaysTakesRealReadings)
-{
-    app_leds_green_is_lit_fake.return_val = true;
-    stop_reading_light_sensor();
-    start_reading_light_sensor_for_calibration();
-    run_until(m_now + 4 * LIGHT_SENSOR_CAL_SAMPLE_TIME_MS + 180);
-    EXPECT_EQ(5u, app_leds_green_off_for_lux_fake.call_count);
-}

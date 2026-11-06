@@ -150,7 +150,7 @@ void occ_sensor_init(void)
   }
   else if(eADAPTIV_NWK == get_present_network())
   {
-     suspend_light_sensor_control(DSECS_5_SECS);
+     suspend_light_sensor_control(5000UL);
      occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
      occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
      occ_time_stamp = get_time_ms();
@@ -658,7 +658,7 @@ void suspend_all_sensors(uint16_t Dsecs)
 {
   suspend_occ_sensor_control(Dsecs);
 
-  suspend_light_sensor_control(Dsecs);
+  suspend_light_sensor_control(100UL * (uint32_t)Dsecs);
 }
 
 
@@ -699,7 +699,7 @@ void occ_sensor_logic(bool occupied)
      return;
   }
 
-  // DHS calibration
+  // Firmware version display
   if(is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
   {
      return;

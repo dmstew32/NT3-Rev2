@@ -13,8 +13,7 @@
  *
  * While green is lit (occupancy) a dark reading is taken only every
  * LIGHT_SENSOR_LIT_READ_MS; the readings in between repeat the last one, so
- * green blinks off once per average instead of every sample.  Calibration
- * always reads.
+ * green blinks off once per average instead of every sample.
  */
 #include <stdlib.h>
 #include "af.h"
@@ -111,7 +110,7 @@ static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
   (void)event;
   if(!light_sensor_measuring)
   {
-     if(app_leds_green_is_lit() && light_sensor_have_reading && !light_sensor_info.in_claibration &&
+     if(app_leds_green_is_lit() && light_sensor_have_reading &&
         !has_timed_out(light_sensor_dark_read_ms, LIGHT_SENSOR_LIT_READ_MS))
      {
         // Green lit: repeat the last reading, don't blink it off
@@ -150,15 +149,7 @@ static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
 // N_LIGHT_SAMPLES,  call the logic.
 static void light_sensor_handler(sl_zigbee_af_event_t *event)
 {
-  if(light_sensor_info.in_claibration)
-  {
-     sl_zigbee_af_event_set_delay_ms(&light_sensor_event, LIGHT_SENSOR_CAL_SAMPLE_TIME_MS);
-  }
-  else
-  {
-     // Normal
-     sl_zigbee_af_event_set_delay_ms(&light_sensor_event, LIGHT_SENSOR_HAL_SAMPLE_TIME_MS);
-  }
+  sl_zigbee_af_event_set_delay_ms(&light_sensor_event, LIGHT_SENSOR_HAL_SAMPLE_TIME_MS);
 
   // Start a reading unless one is in progress (or waiting for a green flash)
   if(!sl_zigbee_af_event_is_scheduled(&light_sensor_read_event))
@@ -170,15 +161,8 @@ static void light_sensor_handler(sl_zigbee_af_event_t *event)
 void start_reading_light_sensor(void)
 {
   //stop_light_sensor();
-  light_sensor_info.in_claibration = false;
   sl_zigbee_af_event_set_active(&light_sensor_event);
   sl_zigbee_app_debug_println("Light sensor started normal   <%d>", get_time_ms());
-}
-void start_reading_light_sensor_for_calibration(void)
-{
-  light_sensor_info.in_claibration = true;
-  sl_zigbee_af_event_set_active(&light_sensor_event);
-  sl_zigbee_app_debug_println("Light sensor fast sample   <%d>", get_time_ms());
 }
 void stop_reading_light_sensor(void)
 {

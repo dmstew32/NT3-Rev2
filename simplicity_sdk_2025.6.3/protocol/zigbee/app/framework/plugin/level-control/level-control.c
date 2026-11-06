@@ -36,7 +36,7 @@
 #include "light_on_off.h"
 
  void suspend_occ_sensor_control(uint16_t Dsecs);
- bool suspend_light_sensor_control(uint16_t Dsecs);
+ bool suspend_light_sensor_control(uint32_t delay_ms);
 // Need to do ths to force silabs code to work with daintree and 2 step dim
 static uint8_t _min_level = DEFAULT_MIN_LIGHT_LEVEL_DT;
 static uint8_t _min_level_on_off = (DEFAULT_MIN_LIGHT_LEVEL_DT-1);
@@ -1582,11 +1582,8 @@ uint32_t sl_zigbee_af_level_control_cluster_server_command_parse(sl_service_opco
 
   if (!cmd->mfgSpecific) {
 #ifdef ADAPTIV_LIGHT
-    uint32_t Dsecs = (uint32_t)get_unoccupied_delay() * 10UL; // Delay in seconds, make dsecs
-
-    suspend_light_sensor_control(Dsecs);
     suspend_occ_sensor_control(DSECS_5_SECS);
-    suspend_light_sensor_control(DSECS_5_SECS);
+    suspend_light_sensor_control(DH_SUSPEND_AFTER_LEVEL_CMD_MS);
     dimming_button_active = false;
 
 #endif // ADAPTIV_LIGHT
@@ -1600,7 +1597,7 @@ uint32_t sl_zigbee_af_level_control_cluster_server_command_parse(sl_service_opco
       {
 #ifdef ADAPTIV_LIGHT
         dimming_button_active = true;
-        suspend_light_sensor_control_dimming(get_unoccupied_delay() * 10); // Delay attr in seconds
+        suspend_light_sensor_control_dimming((uint32_t)get_unoccupied_delay() * 1000UL); // Delay attr in seconds
 #endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_level_control_cluster_move_cb(cmd);
         break;
@@ -1609,7 +1606,7 @@ uint32_t sl_zigbee_af_level_control_cluster_server_command_parse(sl_service_opco
       {
 #ifdef ADAPTIV_LIGHT
         dimming_button_active = true;
-        suspend_light_sensor_control_dimming(get_unoccupied_delay() * 10); // Delay attr in seconds
+        suspend_light_sensor_control_dimming((uint32_t)get_unoccupied_delay() * 1000UL); // Delay attr in seconds
 #endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_level_control_cluster_step_cb(cmd);
         break;
@@ -1628,7 +1625,7 @@ uint32_t sl_zigbee_af_level_control_cluster_server_command_parse(sl_service_opco
       {
 #ifdef ADAPTIV_LIGHT
         dimming_button_active = true;
-        suspend_light_sensor_control_dimming(get_unoccupied_delay() * 10); // Delay attr in seconds
+        suspend_light_sensor_control_dimming((uint32_t)get_unoccupied_delay() * 1000UL); // Delay attr in seconds
 #endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_level_control_cluster_move_with_on_off_cb(cmd);
         break;
@@ -1637,7 +1634,7 @@ uint32_t sl_zigbee_af_level_control_cluster_server_command_parse(sl_service_opco
       {
 #ifdef ADAPTIV_LIGHT
         dimming_button_active = true;
-        suspend_light_sensor_control_dimming(get_unoccupied_delay() * 10); // Delay attr in seconds
+        suspend_light_sensor_control_dimming((uint32_t)get_unoccupied_delay() * 1000UL); // Delay attr in seconds
 #endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_level_control_cluster_step_with_on_off_cb(cmd);
         break;

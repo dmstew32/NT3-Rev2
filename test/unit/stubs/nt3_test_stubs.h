@@ -197,6 +197,16 @@ sl_status_t sl_token_get_data(uint32_t token, uint32_t index, void *data, uint32
 sl_status_t sl_token_set_data(uint32_t token, uint32_t index, void *data, uint32_t length);
 #define TOKEN_APP_UNOCCUPIED_DELAY  0x1001u
 #define TOKEN_APP_ADAPTIV_COMMISH_INFO  0x1002u
+#define TOKEN_APP_LIGHT_SENSOR_LUX  0x1003u
+#define TOKEN_APP_LIGHT_LEVEL_MAX_STASHED  0x1004u
+#define TOKEN_APP_LIGHT_LEVEL_MID_STASHED  0x1005u
+#define TOKEN_APP_LIGHT_LEVEL_MIN_STASHED  0x1006u
+#define TOKEN_APP_LIGHT_LEVEL_MAX  0x1007u
+#define TOKEN_APP_LIGHT_LEVEL_MID  0x1008u
+#define TOKEN_APP_LIGHT_LEVEL_MIN  0x1009u
+#define TOKEN_APP_ALLOW_LIGHT_OFF  0x100Au
+#define TOKEN_APP_COLOR_TEMP_K  0x100Bu
+#define TOKEN_APP_UNOCCUPIED_DELAY_TO_OFF  0x100Cu
 typedef struct
 {
   uint8_t enable_byte;
@@ -219,6 +229,7 @@ sl_status_t broadcast_autocommission_announce(void);
 void sl_zigbee_af_core_println(const char *format, ...);
 void sl_zigbee_af_core_print(const char *format, ...);
 void sl_zigbee_app_debug_println(const char *format, ...);
+void sl_zigbee_app_debug_print(const char *format, ...);
 void sl_zigbee_core_debug_print(const char *format, ...);
 void sl_zigbee_core_debug_println(const char *format, ...);
 
@@ -323,6 +334,31 @@ uint8_t get_number_of_multicast_bindings(void);
 void get_multicast_info(uint8_t index, device_binding_info_t *info);
 bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level);
 bool tx_occ_level_change(uint8_t state, uint8_t level);
+bool tx_dh_level(uint8_t level, uint8_t ramp_ds);
+bool tx_dh_master_claim(void);
+
+// daylight harvesting (light_on_off.h, nwk_utils.h, hal_pwm.h, occ_sensor.h)
+void move_to_level_dhs(uint8_t level, uint16_t transitionTimeDs);
+uint8_t hal_get_dim_pwm_255(void);
+
+// on/off, flashes, max level (nwk_utils.h, adaptiv_config.h, occ_sensor.h)
+#ifndef SL_ZIGBEE_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE
+#define SL_ZIGBEE_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE 0x86u
+#endif
+#ifndef ZCL_FRAME_CONTROL_SERVER_TO_CLIENT
+#define ZCL_FRAME_CONTROL_SERVER_TO_CLIENT 0x08u
+#endif
+void fill_in_apsFrame(sl_zigbee_af_cluster_command_t *cmd, sl_zigbee_aps_frame_t *apsFrame);
+void occ_sensor_set_switch_level(uint8_t level);
+sl_zigbee_af_status_t sl_zigbee_af_write_manufacturer_specific_server_attribute(uint8_t endpoint, uint16_t cluster,
+                                                                                sl_zigbee_af_attribute_id_t attributeID,
+                                                                                uint16_t manufacturerCode, uint8_t *dataPtr,
+                                                                                uint8_t dataType);
+bool write_level_config_attribute(sl_zigbee_af_attribute_id_t attribute, uint8_t data);
+bool write_light_temperature_attribute(uint16_t temperature);
+bool write_occupancy_sensor_attribute(sl_zigbee_af_attribute_id_t attribute, uint8_t *data);
+typedef uint8_t sl_802154_long_addr_t[8];
+void sl_zigbee_af_get_eui64(uint8_t *eui64);
 
 #ifdef __cplusplus
 }

@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 void execute_light_sensor_logic(light_sensor_info_t *light_sensor_info);
+void dh_set_master(bool enable);
 #ifdef __cplusplus
 }
 #endif

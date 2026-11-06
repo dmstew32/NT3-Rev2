@@ -52,7 +52,7 @@ The difference matters a lot:
 | Network status LED | red: 2 blinks every 6 s | red off |
 | Adaptiv occupancy control | **none** (sensor runs, LED shows motion) | group occupancy (section 5.3) |
 | Adaptiv button settings | rejected, except the always-on ones | allowed, sent to the whole group |
-| Adaptiv daylight harvesting | no | yes (if calibrated) |
+| Adaptiv daylight harvesting | no | yes (if a master and a target are set) |
 | Daintree occupancy | light controls itself, 2 h timeout | sensor only reports, gateway controls the light |
 | Messages to other lights | none (nothing to send to) | settings and occupancy multicast to the group |
 
@@ -83,6 +83,7 @@ The difference matters a lot:
 | Manual dim hold (D) | yes | yes | yes | yes | yes | yes |
 | 50 % / EM / factory reset / version | yes | yes | yes | yes | yes | yes |
 | Manual add (T×6+D×6, T+D hold) | rejected | **yes** | rejected | rejected | rejected | rejected |
+| DH master (T×3+D×3) | rejected | rejected | **yes** | rejected | rejected | rejected |
 | Allow off | – | – | – | yes | yes | – |
 | No-comms fallback (30 min → full) | – | – | – | yes | yes | – |
 
@@ -199,7 +200,7 @@ whole group.
 | Condition | Effect |
 |---|---|
 | Unoccupied delay = 0 (D×9, or a delay write) | Sensor **stopped**. Green off. The light stays where it is; nothing turns it on or off. A stopped sensor reports "occupied". |
-| Daylight harvesting calibration, firmware version display (`B_DISABLE_OCC_SENSOR`) | Sensor still samples and green follows motion, but occupancy does not control the light, and Adaptiv group messages are ignored. |
+| Firmware version display (`B_DISABLE_OCC_SENSOR`) | Sensor still samples and green follows motion, but occupancy does not control the light, and Adaptiv group messages are ignored. |
 | Adaptiv, not grouped | No occupancy control (green still follows motion). |
 | Daintree, grouped | Sensor only reports; it never turns the light on or off. |
 | Unknown network | No occupancy control. |
@@ -215,7 +216,7 @@ Every light keeps its own timer; the group stays in sync with two multicasts
 - **Level change (0xE0):** state (ON / MID / OFF), level.
 
 A light ignores its own multicasts, and ignores these messages when its
-sensor is off (delay 0) or during calibration.
+sensor is off (delay 0) or while the firmware version is displayed.
 
 **States:** ON → *(dim delay, no motion)* → MID → *(off delay, no motion)* → OFF.
 
@@ -288,16 +289,21 @@ The D-button delays do not apply on Daintree (button settings are rejected).
 
 ## 6. Daylight harvesting (Adaptiv only)
 
-- Runs only when **all** of these are true: Adaptiv network, grouped,
-  calibrated with a lux reference, light on, occupancy state ON (not mid or
-  off), not suspended, level above the minimum allowed, and this light is the
-  group's **master** light.
-- The master averages its lux readings (8 readings over 20 s), compares the
-  mean with the calibrated reference, ignores errors under 5 %, and otherwise
-  ramps the group's level over 18.5 s. The other lights follow and share
-  their readings.
-- Calibration is started from the Twitch; occupancy is suspended while it
-  runs.
+- The group's **master** is selected with the buttons (T×3 + D×3, off by
+  default). The light selected last is the master: it tells the group, and any
+  other master stops. The **target lux** is set by the Twitch only: 0 (off), 300, 500 or
+  800. There is no calibration.
+- The master runs only when **all** of these are true: Adaptiv network, grouped,
+  a target that is not 0, light on, occupancy state ON (not mid or off), not
+  suspended, and level at least the minimum allowed.
+- The master averages its lux readings (8 readings over 20 s). At most once
+  every 60 s, if the mean is more than 50 lux from the target, it multicasts a
+  new level: halfway to `level × target / lux`, at most 30 % of the level per
+  update. The group ramps over 18.5 s. The last new level is sent once more for a
+  light that missed it, and the present level is sent again about every 10
+  minutes for a light that restarted.
+- A light that is off, at mid, suspended or recently dimmed by a switch ignores
+  the level. Details: `NT3_Daylight_Harvesting.md`.
 - Not used on Daintree, unknown or not-joined lights (readings are still
   taken; on Daintree the lux value is reported as an attribute).
 
@@ -346,6 +352,7 @@ Two buttons: **T** (button 0) and **D** (button 1, nearest the sensor).
 |---|---|
 | T×10 + D×10 (±1 each) | **Factory reset** (section 10) |
 | T×2 + D×2 | Toggle **50 % mode** |
+| T×3 + D×3 | Toggle **daylight harvesting master** (Adaptiv, in a group; otherwise fail). Red blinks 3×; the main light also blinks 3× when this light becomes the master |
 | T×4 + D×4 | Toggle **EM mode** |
 | T×8 + D×8 | Show **firmware version** on the LEDs |
 | T×6 + D×6 | **Local auto-commission** (manual add + announce): **Adaptiv, not grouped only**; rejected elsewhere |
@@ -378,6 +385,12 @@ the new setting is multicast to every light in the group.
 | 6 | 10 % | 10 % | 0 |
 
 Any other combination is rejected.
+
+A higher max level moves the light to the new max, which is also the level
+occupancy then wakes to. A lower max only limits the level.
+
+Flashes from selecting the DH master or from a Twitch config write end at the
+prior level, or off if the light was off.
 
 ### 8.2 Holds
 
@@ -414,7 +427,8 @@ Applied on joining from not joined, and by factory reset.
 | Occupancy threshold | 80 |
 | Colour | 4000 K |
 | Allow off | true |
-| Lux target | 0 (daylight harvesting off until calibrated) |
+| Lux target | 0 (daylight harvesting off) |
+| Daylight harvesting master | off |
 
 ---
 
@@ -425,7 +439,7 @@ T×10 + D×10 (±1). Red LED solid until done. Steps, 500 ms apart:
 1. Leave the network.
 2. Clear the reporting table, groups, bindings and scenes.
 3. Reset settings to defaults (section 9) and the network type to not joined.
-   A normal reset also clears the mode flags (50 %, EM, manual-on, calibration,
+   A normal reset also clears the mode flags (50 %, EM, manual-on, DH master,
    2 h delay, manual add).
 4. Restart the chip.
 

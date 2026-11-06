@@ -30,10 +30,6 @@ uint32_t get_app_flags_nonvol(void);
 
 void adaptiv_disco_request_callback(const sl_zigbee_af_service_discovery_result_t* result);
 
-void init_sink_debug(void);
-bool sink_debug_enabled(void);
 void sink_setup(uint8_t cmd);
-sl_status_t tx_source_debug(uint8_t *data, uint8_t length);
-bool rx_sink_debug(sl_zigbee_af_cluster_command_t* cmd);
 
 #endif /* NWK_NWK_UTILS_H_ */

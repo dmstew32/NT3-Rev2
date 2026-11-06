@@ -5,6 +5,7 @@
 #include "hal_leds.h"
 #include "hal_occ_sensor.h"
 #include "occ_sensor.h"
+#include "light_sensor.h"
 #include "hal_buttons.h"
 #include "hal_pwm.h"
 #include "factory_reset.h"
@@ -31,6 +32,9 @@
 
 #define N_BUT0_PRESSES_FOR_EM_MODE    (4)
 #define N_BUT1_PRESSES_FOR_EM_MODE    (4)
+
+#define N_BUT0_PRESSES_FOR_DH_MASTER  (3)
+#define N_BUT1_PRESSES_FOR_DH_MASTER  (3)
 
 #define N_BUT0_PRESSES_BX_MANUAL_ADD  (6)
 #define N_BUT1_PRESSES_BX_MANUAL_ADD  (6)
@@ -216,6 +220,21 @@ static void set_light_levels(uint8_t presses_t, uint8_t presses_d)
   app_leds_show_presses(presses_t);
 }
 
+// The group's daylight harvesting master, off by default.  Red shows the presses
+// either way; the light also flashes when this light becomes the master.  Becoming
+// the master takes over from any other master in the group (dh_set_master()).
+static void toggle_dh_master(uint8_t presses)
+{
+  bool enable = !is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT);
+
+  dh_set_master(enable);
+  app_leds_show_presses(presses);
+  if(enable)
+  {
+     dim_lights_up_down(presses, DSECS_HALF_SECS);
+  }
+}
+
 // A press sequence finished: decide what the presses mean.
 static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
 {
@@ -236,6 +255,18 @@ static void on_button_sequence(uint8_t presses_t, uint8_t presses_d)
   {
      app_leds_show_presses(presses_d);
      toggle_em_mode();
+  }
+  /***********************    DH MASTER    *********************/
+  else if((N_BUT0_PRESSES_FOR_DH_MASTER == presses_t) && (N_BUT1_PRESSES_FOR_DH_MASTER == presses_d))
+  {
+     if((eADAPTIV_NWK == get_present_network()) && device_is_in_a_group())
+     {
+        toggle_dh_master(presses_d);
+     }
+     else
+     {
+        app_leds_show_fail();
+     }
   }
   /***********************   DO TWITCH's JOB  *********************/
   else if((N_BUT0_PRESSES_BX_MANUAL_ADD == presses_t) && (N_BUT1_PRESSES_BX_MANUAL_ADD == presses_d))

@@ -69,6 +69,9 @@ nt3_test(test_app_leds        test_app_leds.cpp        ${LIGHT}/leds/app_leds.c 
 
 # light sensor
 nt3_test(test_hal_light_sensor test_hal_light_sensor.cpp ${LIGHT}/hal/hal_light_sensor.c)
+nt3_test(test_dh_control test_dh_control.cpp ${LIGHT}/nwk_sensors/dh_control.c)
+nt3_test(test_dh_debug test_dh_debug.cpp ${LIGHT}/nwk_mgmt/dh_debug.c)
+nt3_test(test_light_sensor test_light_sensor.cpp ${LIGHT}/nwk_sensors/light_sensor.c ${LIGHT}/nwk_sensors/dh_control.c)
 
 # occupancy
 nt3_test(test_occ_group test_occ_group.cpp ${LIGHT}/occupancy/occ_group.c)
@@ -77,6 +80,11 @@ nt3_test(test_occ_sensor test_occ_sensor.cpp ${LIGHT}/nwk_sensors/occ_sensor.c $
 
 # auto commissioning
 nt3_test(test_auto_comm test_auto_comm.cpp ${LIGHT}/auto_commission/auto_comm.c)
+
+# on/off, flashes, max level
+nt3_test(test_light_on_off test_light_on_off.cpp ${LIGHT}/nwk_on_off/light_on_off.c)
+# The handler takes no argument, as in the firmware build this is only a warning
+set_source_files_properties(${LIGHT}/nwk_on_off/light_on_off.c PROPERTIES COMPILE_OPTIONS -Wno-incompatible-pointer-types)
 
 # light levels
 nt3_test(test_light_levels test_light_levels.cpp ${LIGHT}/utils/light_levels.c)

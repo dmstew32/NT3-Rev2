@@ -154,7 +154,7 @@ static void factory_reset_handler(sl_zigbee_af_event_t *event)
 
            if(eRESET_NORMAL == factory_reset_reason)
            {
-              set_app_flags_nonvol((B_DHS_MASTER_LIGHT | B_DHS_CALIBRATING | B_DHS_CALIBRATED | B_EM_MODE |
+              set_app_flags_nonvol((B_DHS_MASTER_LIGHT | B_DHS_OLD_FLAGS | B_EM_MODE |
                                     B_OCC_XXL_DELAY_ENABLED | B_MANUAL_ADD_MODE | B_DISABLE_LIGHT_SENSOR |
                                     B_DISABLE_OCC_SENSOR | B_MANUAL_ON_MODE | B_50_PERCENT_MODE), 0);
               sl_zigbee_app_debug_println("   ALL tokens set to defaults   <%d>", get_time_ms());
