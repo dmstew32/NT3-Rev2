@@ -36,7 +36,7 @@
 // <o SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_DOWNLOAD_DELAY_MS> Download Delay (ms) <0-65535>
 // <i> Default: 0
 // <i> How often a new block of data (or page) is requested during a download by the client.  A value of 0 means the client will request the blocks (or pages) as fast as the server responds.
-#define SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_DOWNLOAD_DELAY_MS   10
+#define SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_DOWNLOAD_DELAY_MS   0
 
 // <o SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_DOWNLOAD_ERROR_THRESHOLD> Download Error Threshold <1-255>
 // <i> Default: 10

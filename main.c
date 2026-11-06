@@ -68,6 +68,7 @@ int nodeMain(void)
 #include "adaptiv_config.h"
 #include "nwk_groups.h"
 #include "sl_zigbee_debug_print.h"
+#include "ota_diag.h"
 
 static void power_event_occurred(sl_power_manager_em_t from, sl_power_manager_em_t to);
 void on_off_count_task(taskParm_t parm0, taskParm_t parm1);
@@ -130,6 +131,10 @@ void app_init(void)
 void app_process_action(void)
 {
   pet_the_dog();
+
+#if (OTA_DIAG_ENABLED == 1)
+  ota_diag_main_loop(halCommonGetInt32uMillisecondTick());
+#endif
 
   taskerTick();
 
