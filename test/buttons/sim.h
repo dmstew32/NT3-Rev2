@@ -87,7 +87,7 @@ void sl_zigbee_core_debug_println(const char *fmt, ...);
 #define MIN_ALLOWABLE_LIGHT_LEVEL  (25)
 #define DEFAULT_OCC_SENSOR_XXL_DELAY    (2UL*60UL*60UL)
 #define DEFAULT_OCC_SENSOR_THRESHOLD    (80)
-#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (60)
+#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (40)
 #define B_50_PERCENT_MODE       (1UL << 0UL)
 #define B_DISABLE_OCC_SENSOR    (1UL << 2UL)
 #define B_DISABLE_LIGHT_SENSOR  (1UL << 3UL)
@@ -125,6 +125,7 @@ uint16_t read_light_level_attribute(uint16_t id);
 bool is_app_flags_nonvol_set(uint32_t mask);
 void dim_lights_up_down(uint16_t cycles, uint16_t ramp_Dsecs);
 void dh_set_master(bool enable);
+void dh_disable(void);
 void set_app_flags_nonvol(uint32_t mask, uint8_t value);
 void sl_token_get_data(uint32_t token, uint32_t index, void *data, uint32_t length);
 void sl_token_set_data(uint32_t token, uint32_t index, void *data, uint32_t length);

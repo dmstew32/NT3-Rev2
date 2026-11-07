@@ -125,6 +125,11 @@ TEST_F(DhDebug, TheMessageBytes)
     EXPECT_EQ(expected, m_bytes);
 }
 
+TEST_F(DhDebug, TheDisabledFlagIsBit1)
+{
+    EXPECT_EQ(0x02, DH_DEBUG_MODE_DH_DISABLED);
+}
+
 TEST_F(DhDebug, ARefusedSendIsReported)
 {
     dh_debug_set_target(0x1234);

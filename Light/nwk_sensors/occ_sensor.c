@@ -351,6 +351,12 @@ static bool grp_broadcast_traffic_heavy(void *ctx)
   return(BROADCASTING_HEAVY == broadcast_monitor_get_traffic());
 }
 
+static void grp_woke_from_off(void *ctx)
+{
+  (void)ctx;
+  dh_enable();
+}
+
 static const occ_group_ops_t occ_group_ops =
 {
   .ctx = NULL,
@@ -363,6 +369,7 @@ static const occ_group_ops_t occ_group_ops =
   .send_level_change = grp_send_level_change,
   .random_ms = grp_random_ms,
   .broadcast_traffic_heavy = grp_broadcast_traffic_heavy,
+  .woke_from_off = grp_woke_from_off,
 };
 
 // Every light starts ON with a full timer and sends nothing

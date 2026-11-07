@@ -54,6 +54,7 @@ FAKE_VALUE_FUNC(uint8_t, get_number_of_multicast_bindings);
 FAKE_VOID_FUNC(get_multicast_info, uint8_t, device_binding_info_t *);
 FAKE_VALUE_FUNC(uint32_t, get_random_number, uint32_t, uint32_t);
 FAKE_VALUE_FUNC(bool, suspend_light_sensor_control, uint32_t);
+FAKE_VOID_FUNC(dh_enable);
 FAKE_VALUE_FUNC(uint8_t, addTask, test_task_fn_t, taskParm_t, taskParm_t);
 FAKE_VALUE_FUNC(uint8_t, removeTask, test_task_fn_t);
 FAKE_VALUE_FUNC(sl_status_t, sl_token_get_data, uint32_t, uint32_t, void *, uint32_t);
@@ -124,7 +125,7 @@ protected:
     {
         RESET_FAKE(get_present_network); RESET_FAKE(move_to_level_onoff); RESET_FAKE(sl_zigbee_af_on_off_cluster_off_cb);
         RESET_FAKE(clear_off_from_switch); RESET_FAKE(clear_on_from_switch); RESET_FAKE(restore_unoccupied_delay);
-        RESET_FAKE(sl_zigbee_send_multicast); RESET_FAKE(hal_start_occ_sensor); RESET_FAKE(hal_stop_occ_sensor);
+        RESET_FAKE(dh_enable); RESET_FAKE(sl_zigbee_send_multicast); RESET_FAKE(hal_start_occ_sensor); RESET_FAKE(hal_stop_occ_sensor);
         RESET_FAKE(broadcast_monitor_get_traffic);
         broadcast_monitor_get_traffic_fake.return_val = BROADCASTING_LIGHT;
         FFF_RESET_HISTORY();
@@ -219,21 +220,22 @@ TEST_F(OccSensor, PowerUpStartsOnAndSendsNothing)
     EXPECT_FALSE(is_occ_mid_or_lower());
 }
 
-TEST_F(OccSensor, DaylightHarvestingLevelBytes)
+TEST_F(OccSensor, DaylightHarvestingLevelAdjustBytes)
 {
-    ASSERT_TRUE(tx_dh_level(120, 185));
+    ASSERT_TRUE(tx_dh_level_adjust(100, 120, 20));
     ASSERT_EQ(1u, m_air.size());
     EXPECT_EQ(ZCL_ILLUM_MEASUREMENT_CLUSTER_ID, m_air[0].aps.clusterId);
     EXPECT_EQ(3, m_air[0].radius);
-    ASSERT_EQ(7u, m_air[0].bytes.size());
-    EXPECT_EQ(0xDE, m_air[0].bytes[4]);
-    EXPECT_EQ(120, m_air[0].bytes[5]);
-    EXPECT_EQ(185, m_air[0].bytes[6]);
+    ASSERT_EQ(8u, m_air[0].bytes.size());
+    EXPECT_EQ(0xE0, m_air[0].bytes[4]);
+    EXPECT_EQ(100, m_air[0].bytes[5]);
+    EXPECT_EQ(120, m_air[0].bytes[6]);
+    EXPECT_EQ(20, m_air[0].bytes[7]);
 
     m_refuse = 1;
-    EXPECT_FALSE(tx_dh_level(120, 185));
+    EXPECT_FALSE(tx_dh_level_adjust(100, 120, 20));
     get_present_network_fake.return_val = eDAINTREE_NWK;
-    EXPECT_FALSE(tx_dh_level(120, 185));
+    EXPECT_FALSE(tx_dh_level_adjust(100, 120, 20));
 }
 
 TEST_F(OccSensor, DaylightHarvestingMasterClaimBytes)

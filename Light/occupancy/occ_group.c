@@ -114,6 +114,10 @@ static bool occupied_now(const occ_group_t *g, uint32_t now_ms)
 // Go ON with the group's timer (a wake was received, ours or another light's)
 static void wake_on(occ_group_t *g, uint32_t now_ms, uint32_t duration_ms)
 {
+  if(OCC_GROUP_OFF == g->state)
+  {
+     g->ops->woke_from_off(g->ops->ctx);
+  }
   cancel(g);
   enter(g, OCC_GROUP_ON, now_ms);
   start_timer(g, now_ms, duration_ms);

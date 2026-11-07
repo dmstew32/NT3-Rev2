@@ -360,6 +360,8 @@ static void on_hold_dim(app_button_t gesture)
   (void)gesture;
 
   uint8_t next_level = get_present_light_level() - DEFAULT_MIN_LIGHT_LEVEL_DT/4;
+
+  dh_disable();    // Someone is choosing this light's level
   if(DEFAULT_MIN_LIGHT_LEVEL_DT <= next_level)
   {
      move_to_level_onoff(next_level, 0);

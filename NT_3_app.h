@@ -26,8 +26,8 @@
 // Adaptive commands
 #define ZCL_ADAPTIV_DEBUG_CLUSTER_ID          (0xFCDB)
 #define ZCL_ADAPTIV_DEBUG_COMMAND_ID          (0xDB)
-/* 0xDC, 0xDD: earlier daylight harvesting commands, ignored now */
-#define ZCL_DH_LEVEL_COMMAND_ID               (0xDE)
+/* 0xDC, 0xDD, 0xDE: earlier daylight harvesting commands, ignored now */
+#define ZCL_DH_LEVEL_ADJUST_COMMAND_ID        (0xE0)
 #define ZCL_DH_MASTER_CLAIM_COMMAND_ID        (0xDF)
 #define ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID     (0xDF)   /* occ_group.h */
 #define ZCL_OCCUPANCY_SENSOR_LEVEL_CHANGE_COMMAND_ID  (0xE0)
@@ -48,7 +48,7 @@
 #define DEFAULT_OCC_SENSOR_XXL_DELAY    (2UL*60UL*60UL) /* 2 hours */
 #define DEFAULT_OCC_SENSOR_XXXL_DELAY   (3UL*60UL*60UL) /* 3 hours occ sensor*/
 #define DEFAULT_OCC_SENSOR_THRESHOLD    (80)        /* Trip point */
-#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (60)
+#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (40)
 
 #define DEFAULT_SENSOR_LUX_TARGET  (0)         /* DHS Off */
 

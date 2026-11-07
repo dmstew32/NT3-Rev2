@@ -28,15 +28,15 @@
 #warning "LIGHT_SENSOR_PRINT active"
 #endif
 
-// Inhibit bits, see get_dhs_inhibit_bits().  Bit 1 is unused (was: not calibrated).
+// Inhibit bits, see get_dhs_inhibit_bits().  Bit 8 is unused.
 #define DHS_INHIBIT_NOT_ADAPTIV   (1U << 0)
+#define DHS_INHIBIT_DH_DISABLED   (1U << 1)
 #define DHS_INHIBIT_OFF           (1U << 2)
 #define DHS_INHIBIT_NOT_IN_GROUP  (1U << 3)
 #define DHS_INHIBIT_SUSPENDED     (1U << 4)
 #define DHS_INHIBIT_NO_TARGET     (1U << 5)
 #define DHS_INHIBIT_LOW_LEVEL     (1U << 6)
 #define DHS_INHIBIT_OCC_MID       (1U << 7)
-#define DHS_INHIBIT_DIMMING       (1U << 8)
 #define DHS_INHIBIT_DISABLED      (1U << 9)
 #define DHS_INHIBIT_NOT_MASTER    (1U << 10)
 
@@ -46,29 +46,37 @@
 static int16_t light_sensor_reference = 0;
 static bool light_sensor_control_suspended = true;
 static uint32_t light_sensor_suspend_end_ms = 0UL;
-static bool light_sensor_control_suspended_dimming = false;
+// A person chose the level.  Not saved: DH is back on after a restart.
+static bool dh_disabled = false;
+static uint8_t debug_readings = 0U;
+static uint8_t debug_checks = 0U;
+static uint8_t debug_last_level = 0U;
+static uint16_t debug_previous_reading = 0U;
 static light_sensor_data_t light_sensor_data;
 static uint16_t dhs_inhibit_bits = 0;
 
 static dh_master_t dh_master;
-// Something changed the light or lit the sensor since the last average
-static bool dhs_average_disturbed = false;
+// Something changed the light or lit the sensor since the last reading
+static bool dhs_reading_disturbed = false;
 
 /****************************  SENDING  ****************************/
-static bool dh_send_level(void *ctx, uint8_t level, uint8_t ramp_ds)
+static uint8_t dh_debug_mode_flags(void)
+{
+  uint8_t flags = 0U;
+
+  flags |= is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT) ? DH_DEBUG_MODE_MASTER : 0U;
+  flags |= dh_disabled ? DH_DEBUG_MODE_DH_DISABLED : 0U;
+  return(flags);
+}
+
+static bool dh_send_level(void *ctx, uint8_t current_level, uint8_t target_level, uint8_t duration_sec)
 {
   (void)ctx;
-  bool sent = tx_dh_level(level, ramp_ds);
-
-  if(sent)
-  {
-     dh_debug_send(light_sensor_data.mean_lux, (uint16_t)light_sensor_reference, hal_get_dim_pwm_255(),
-                   is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT) ? DH_DEBUG_MODE_MASTER : 0U, level);
-  }
+  bool sent = tx_dh_level_adjust(current_level, target_level, duration_sec);
 
   #if (1 <= LIGHT_SENSOR_PRINT)
-  sl_zigbee_app_debug_println("DHS MASTER  tx level:%d %s  lux:%d  ref:%d   <%d>", level, sent ? "" : "REFUSED",
-                              light_sensor_data.mean_lux, light_sensor_reference, get_time_ms());
+  sl_zigbee_app_debug_println("DHS MASTER  tx %d -> %d %s  ref:%d   <%d>", current_level, target_level,
+                              sent ? "" : "REFUSED", light_sensor_reference, get_time_ms());
   #endif
   return(sent);
 }
@@ -90,7 +98,7 @@ static void dh_retry_task(taskParm_t parm0, taskParm_t parm1)
   if(has_timed_out(parm0.u32, parm1.u32))
   {
      removeTask(dh_retry_task);
-     dh_master_retry(&dh_master, allow_light_sensor_control());
+     dh_master_retry(&dh_master);
   }
 }
 
@@ -161,8 +169,12 @@ void light_sensor_init(void)
   memset(&light_sensor_data, 0, sizeof(light_sensor_data_t));
 
   light_sensor_control_suspended = false;
-  light_sensor_control_suspended_dimming = false;
-  dhs_average_disturbed = false;
+  dh_disabled = false;
+  debug_readings = 0U;
+  debug_checks = 0U;
+  debug_last_level = 0U;
+  debug_previous_reading = 0U;
+  dhs_reading_disturbed = false;
 
   suspend_light_sensor_control(LIGHT_SENSOR_UPDATE_AVERAGE_MS);
 
@@ -187,17 +199,18 @@ static uint16_t get_dhs_inhibit_bits(void)
   dhs_inhibit_bits |= (0 == light_sensor_reference) ? DHS_INHIBIT_NO_TARGET : 0;
   dhs_inhibit_bits |= (MIN_ALLOWABLE_LIGHT_LEVEL > hal_get_dim_pwm_255()) ? DHS_INHIBIT_LOW_LEVEL : 0;
   dhs_inhibit_bits |= is_occ_mid_or_lower() ? DHS_INHIBIT_OCC_MID : 0;
-  dhs_inhibit_bits |= light_sensor_control_suspended_dimming ? DHS_INHIBIT_DIMMING : 0;
+  dhs_inhibit_bits |= dh_disabled ? DHS_INHIBIT_DH_DISABLED : 0;
   dhs_inhibit_bits |= is_app_flags_nonvol_set(B_DISABLE_LIGHT_SENSOR) ? DHS_INHIBIT_DISABLED : 0;
   dhs_inhibit_bits |= is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT) ? 0 : DHS_INHIBIT_NOT_MASTER;
 
   #if (1 <= LIGHT_SENSOR_PRINT)
   sl_zigbee_app_debug_print("DHS %s", (0 == dhs_inhibit_bits) ? "YES" : "NO");
-  sl_zigbee_app_debug_println("  %d(nwk) %d(off) %d(!grp) %d(susp) %d(0ref) %d(0pwm) %d(occ) %d(dim) %d(inh) %d(mstr)",
-    (0 != (dhs_inhibit_bits & DHS_INHIBIT_NOT_ADAPTIV)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_OFF)),
+  sl_zigbee_app_debug_println("  %d(nwk) %d(dis) %d(off) %d(!grp) %d(susp) %d(0ref) %d(0pwm) %d(occ) %d(inh) %d(mstr)",
+    (0 != (dhs_inhibit_bits & DHS_INHIBIT_NOT_ADAPTIV)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_DH_DISABLED)),
+    (0 != (dhs_inhibit_bits & DHS_INHIBIT_OFF)),
     (0 != (dhs_inhibit_bits & DHS_INHIBIT_NOT_IN_GROUP)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_SUSPENDED)),
     (0 != (dhs_inhibit_bits & DHS_INHIBIT_NO_TARGET)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_LOW_LEVEL)),
-    (0 != (dhs_inhibit_bits & DHS_INHIBIT_OCC_MID)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_DIMMING)),
+    (0 != (dhs_inhibit_bits & DHS_INHIBIT_OCC_MID)),
     (0 != (dhs_inhibit_bits & DHS_INHIBIT_DISABLED)), (0 != (dhs_inhibit_bits & DHS_INHIBIT_NOT_MASTER)));
   #endif
 
@@ -212,7 +225,20 @@ bool allow_light_sensor_control(void)
 // The red LED reaches the sensor (hal_set_red_led())
 void set_dhs_time_stamp(void)
 {
-  dhs_average_disturbed = true;
+  dhs_reading_disturbed = true;
+}
+
+// A level command, on/off, scene recall or the D hold: DH leaves the level alone
+void dh_disable(void)
+{
+  dh_disabled = true;
+}
+
+// After the lights went off and occupancy turned them on, or the master or the
+// target was set
+void dh_enable(void)
+{
+  dh_disabled = false;
 }
 
 static void unsuspend_light_sensor_task(taskParm_t parm0, taskParm_t parm1)
@@ -245,7 +271,7 @@ bool suspend_light_sensor_control(uint32_t delay_ms)
      light_sensor_suspend_end_ms = end_ms;
   }
   light_sensor_control_suspended = true;
-  dhs_average_disturbed = true;
+  dhs_reading_disturbed = true;
 
   #if (1 <= LIGHT_SENSOR_PRINT)
   sl_zigbee_app_debug_println("DHS Disabled for %dmS   <%d>", delay_ms, get_time_ms());
@@ -254,48 +280,48 @@ bool suspend_light_sensor_control(uint32_t delay_ms)
   return(true);
 }
 
-static void unsuspend_light_sensor_dimming_task(taskParm_t parm0, taskParm_t parm1)
+// Diagnostic packet: checked every 20 s, sent if the level changed since the last one,
+// otherwise every 120 s.  Not sent (no target, or refused): tried again at the next check.
+static void dhs_debug_tick(uint16_t reading)
 {
-  if(has_timed_out(parm0.u32, parm1.u32))
-  {
-     light_sensor_control_suspended_dimming = false;
-     removeTask(unsuspend_light_sensor_dimming_task);
+  uint32_t lux = dh_calibrated_lux(((uint32_t)debug_previous_reading + (uint32_t)reading) / 2UL);
+  uint8_t level = hal_get_dim_pwm_255();
 
-    #if (1 <= LIGHT_SENSOR_PRINT)
-    sl_zigbee_app_debug_println("DHS Re-enable (Dim) Re-enable   <%d>", get_time_ms());
-    #endif
+  debug_previous_reading = reading;
+
+  debug_readings++;
+  if(DH_DEBUG_CHECK_READINGS > debug_readings)
+  {
+     return;
+  }
+  debug_readings = 0U;
+  if(DH_DEBUG_QUIET_CHECKS > debug_checks)
+  {
+     debug_checks++;
+  }
+
+  if((level != debug_last_level) || (DH_DEBUG_QUIET_CHECKS <= debug_checks))
+  {
+     if(dh_debug_send((0xFFFFUL < lux) ? 0xFFFFU : (uint16_t)lux, (uint16_t)light_sensor_reference, level,
+                      dh_debug_mode_flags(), dh_master_last_level(&dh_master)))
+     {
+        debug_last_level = level;
+        debug_checks = 0U;
+     }
   }
 }
 
-// Disable light sensor modifying the light pwm for a period of time, in ms.
-// Can be called from isr or non-isr cb's. From dimming cmd.
-bool suspend_light_sensor_control_dimming(uint32_t delay_ms)
+// Every reading from the sensor, see hal_light_sensor.c
+void light_sensor_on_reading(uint16_t reading)
 {
-  taskParm_t arg0, arg1;
+  dh_reading_t in;
 
-  arg0.u32 = get_time_ms();
-  arg1.u32 = delay_ms;
-  addTask(unsuspend_light_sensor_dimming_task, arg0, arg1);
-  light_sensor_control_suspended_dimming = true;
-  dhs_average_disturbed = true;
-
-  #if (1 <= LIGHT_SENSOR_PRINT)
-  sl_zigbee_app_debug_println("DHS Disabled (Dim) for %dmS   <%d>", delay_ms, get_time_ms());
-  #endif
-
-  return(true);
-}
-
-// One 20 s average: the master decides whether the group's level changes
-static void dhs_on_average(void)
-{
-  dh_average_t in;
-
-  in.allowed = allow_light_sensor_control() && !dhs_average_disturbed;
-  dhs_average_disturbed = false;
+  in.allowed = allow_light_sensor_control() && !dhs_reading_disturbed;
+  dhs_reading_disturbed = false;
+  in.now_ms = get_time_ms();
+  in.reading = reading;
   in.level = hal_get_dim_pwm_255();
-  in.lux = light_sensor_data.mean_lux;
-  in.target = (uint16_t)light_sensor_reference;
+  in.target_lux = (uint16_t)light_sensor_reference;
   in.floor = (MIN_ALLOWABLE_LIGHT_LEVEL > get_min_light_level()) ? MIN_ALLOWABLE_LIGHT_LEVEL : get_min_light_level();
   in.ceiling = get_max_light_level();
 
@@ -311,7 +337,9 @@ static void dhs_on_average(void)
      }
   }
 
-  dh_master_on_average(&dh_master, &in);
+  dh_master_on_reading(&dh_master, &in);
+
+  dhs_debug_tick(reading);
 }
 
 /****************************************************************************
@@ -329,7 +357,8 @@ void execute_light_sensor_logic(light_sensor_info_t *light_sensor_info)
 if(eDAINTREE_NWK != get_present_network())
 {
   // All but daintree
-  _lux = 3*light_sensor_info->mean_lux + (light_sensor_info->mean_lux >> 1);  //  3.5 X
+  uint32_t calibrated = dh_calibrated_lux(light_sensor_info->mean_lux);
+  _lux = (0xFFFFUL < calibrated) ? 0xFFFFU : (uint16_t)calibrated;
 }
 else
 {
@@ -369,8 +398,6 @@ else
   #endif
   return;
   #endif
-
-  dhs_on_average();
 }
 
 // This light stops being the master, without any indication: the light that
@@ -388,6 +415,7 @@ void dh_set_master(bool enable)
   set_app_flags_nonvol(B_DHS_MASTER_LIGHT, enable);
   if(enable)
   {
+     dh_enable();
      dh_master_claim(&dh_master);
   }
   else
@@ -406,19 +434,20 @@ bool dh_rx_master_claim(sl_zigbee_af_cluster_command_t* cmd)
   return(true);
 }
 
-// RX: ZCL_DH_LEVEL_COMMAND_ID from the group's master (this light's own comes
-// back too, that is how the master moves).  The transmit is tx_dh_level().
-bool dh_rx_level_command(sl_zigbee_af_cluster_command_t* cmd)
+// RX: ZCL_DH_LEVEL_ADJUST_COMMAND_ID from the group's master (this light's own comes
+// back too, that is how the master moves).  The transmit is tx_dh_level_adjust().
+bool dh_rx_level_adjust(sl_zigbee_af_cluster_command_t* cmd)
 {
   uint8_t base_idx = cmd->payloadStartIndex;
 
-  if((uint16_t)(base_idx + 2U) > cmd->bufLen)
+  if((uint16_t)(base_idx + 3U) > cmd->bufLen)
   {
      return(true);
   }
 
-  uint8_t level = cmd->buffer[base_idx];
-  uint8_t ramp_ds = cmd->buffer[base_idx + 1U];
+  // Payload: master's current level (not used here), target level, duration
+  uint8_t level = cmd->buffer[base_idx + 1U];
+  uint8_t duration_sec = cmd->buffer[base_idx + 2U];
 
   // A level from another master: one of the two missed a claim, so neither
   // knows which was selected last.  The lower node ID stays the master.
@@ -427,8 +456,8 @@ bool dh_rx_level_command(sl_zigbee_af_cluster_command_t* cmd)
      dh_stand_down(cmd->source);
   }
 
-  // Off, at mid, suspended, dimmed by a switch: stay as this light is
-  if(0 != (get_dhs_inhibit_bits() & DHS_INHIBITS_FOR_FOLLOWER))
+  // Off, at mid, suspended, DH disabled: stay as this light is.  Level 0 is never valid.
+  if((0U == level) || (0 != (get_dhs_inhibit_bits() & DHS_INHIBITS_FOR_FOLLOWER)))
   {
      #if (1 <= LIGHT_SENSOR_PRINT)
      sl_zigbee_app_debug_println("DHS level %d ignored [0x%X]   <%d>", level, dhs_inhibit_bits, get_time_ms());
@@ -436,7 +465,7 @@ bool dh_rx_level_command(sl_zigbee_af_cluster_command_t* cmd)
      return(true);
   }
 
-  move_to_level_dhs(level, ramp_ds);
+  move_to_level_dhs(level, (uint16_t)duration_sec * 10U);
   return(true);
 }
 
@@ -464,6 +493,7 @@ void save_light_lux_reference(uint16_t lux_ref)
   }
   sl_token_set_data(TOKEN_APP_LIGHT_SENSOR_LUX, 0, &new_ref, sizeof(new_ref));
   light_sensor_reference = new_ref;
+  dh_enable();
 
   sl_zigbee_app_debug_println("\n\rNEW LUX REF %d   <%d>", light_sensor_reference, get_time_ms());
 }

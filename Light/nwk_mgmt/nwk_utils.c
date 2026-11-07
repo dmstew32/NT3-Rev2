@@ -317,9 +317,9 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
         }
         case ZCL_ILLUM_MEASUREMENT_CLUSTER_ID:
         {
-           if(ZCL_DH_LEVEL_COMMAND_ID == cmd->commandId)
+           if(ZCL_DH_LEVEL_ADJUST_COMMAND_ID == cmd->commandId)
            {
-              return_status = dh_rx_level_command(cmd);
+              return_status = dh_rx_level_adjust(cmd);
            }
            else if(ZCL_DH_MASTER_CLAIM_COMMAND_ID == cmd->commandId)
            {

@@ -2,19 +2,20 @@
 #define DH_DEBUG_H_
 
 /*
- * Daylight harvesting debug: each time the master sends a DH level, it also sends
- * one unicast to the debug target, normally a Twitch that prints it on its uart.
+ * Daylight harvesting debug: any light with a debug target sends one unicast to it,
+ * normally a Twitch that prints it on its uart.  Checked every 20 s: sent if the
+ * light's level changed since the last packet, otherwise every 120 s.
  *
  * Cluster ZCL_ADAPTIV_DEBUG_CLUSTER_ID (0xFCDB), command ZCL_ADAPTIV_DEBUG_COMMAND_ID
  * (0xDB), manufacturer 0x1574, endpoint 1 to endpoint 1.  All little endian:
  *
  *   0  u32  lower 4 bytes of this light's EUI64
  *   4  u32  uptime, seconds
- *   8  u16  current lux
+ *   8  u16  current lux, the average of the last 2 readings
  *  10  u16  target lux
- *  12  u8   current level (when the DH level is sent, so before that level's ramp)
- *  13  u8   mode flags, bit 0 = master
- *  14  u8   new level, the one the DH level message just sent to the group
+ *  12  u8   current level
+ *  13  u8   mode flags, bit 0 = master, bit 1 = DH disabled
+ *  14  u8   last level this light sent to the group as master, 0 = none since a restart
  *
  * Nothing is sent until a target is set.  The target is only one of the addresses
  * below 0xFFFC, and it is not saved: after a restart there is none.
@@ -32,6 +33,9 @@
 #define DH_DEBUG_PAYLOAD_LENGTH   (15U)
 #define DH_DEBUG_SET_TARGET_LENGTH (3U)
 #define DH_DEBUG_MODE_MASTER      (1U << 0)
+#define DH_DEBUG_MODE_DH_DISABLED (1U << 1)
+#define DH_DEBUG_CHECK_READINGS   (8U)    /* 8 x 2.5 s = 20 s */
+#define DH_DEBUG_QUIET_CHECKS     (6U)    /* 6 x 20 s = 120 s with no level change */
 
 void dh_debug_set_target(uint16_t node_id);
 uint16_t dh_debug_get_target(void);

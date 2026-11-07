@@ -21,6 +21,8 @@ FAKE_VALUE_FUNC(bool, app_leds_green_off_for_lux);
 FAKE_VOID_FUNC(app_leds_green_lux_done);
 FAKE_VALUE_FUNC(bool, app_leds_green_is_lit);
 FAKE_VOID_FUNC(execute_light_sensor_logic, light_sensor_info_t *);
+FAKE_VOID_FUNC(light_sensor_on_reading, uint16_t);
+FAKE_VALUE_FUNC(bool, is_app_flags_nonvol_set, uint32_t);
 FAKE_VALUE_FUNC(uint8_t, addTask, test_task_fn_t, taskParm_t, taskParm_t);
 FAKE_VALUE_FUNC(uint8_t, removeTask, test_task_fn_t);
 FAKE_VALUE_FUNC(uint32_t, get_time_ms);
@@ -97,7 +99,7 @@ protected:
         RESET_FAKE(sl_zigbee_af_event_init); RESET_FAKE(sl_zigbee_af_event_set_active);
         RESET_FAKE(sl_zigbee_af_event_set_delay_ms); RESET_FAKE(sl_zigbee_af_event_set_inactive);
         RESET_FAKE(sl_zigbee_af_event_is_scheduled); RESET_FAKE(sl_zigbee_app_debug_println);
-        RESET_FAKE(app_leds_green_is_lit);
+        RESET_FAKE(app_leds_green_is_lit); RESET_FAKE(light_sensor_on_reading); RESET_FAKE(is_app_flags_nonvol_set);
         FFF_RESET_HISTORY();
         I2CSPM_Transfer_fake.custom_fake = i2c;
         app_leds_green_off_for_lux_fake.custom_fake = green_off;
@@ -234,6 +236,34 @@ TEST_F(HalLightSensor, AverageGoesToTheLogicOnceTheBufferIsFull)
 }
 
 /* --------------------------------------------------------------- green lit (occupancy) */
+TEST_F(HalLightSensor, TheMasterTakesARealReadingEverySampleEvenWhileGreenIsLit)
+{
+    app_leds_green_is_lit_fake.return_val = true;
+    is_app_flags_nonvol_set_fake.return_val = true;
+    uint32_t start = m_now;
+    run_until(start + 60000 + 180);
+    ASSERT_EQ(60000 / LIGHT_SENSOR_HAL_SAMPLE_TIME_MS + 1, m_green_off_ms.size());
+    for(uint32_t ms : m_green_off_ms)
+    {
+        EXPECT_LE(ms, 200u);
+    }
+}
+
+TEST_F(HalLightSensor, EveryReadingGoesToTheLogic)
+{
+    for(unsigned i = 0; i < 3U; i++)
+    {
+        m_lux_raw = (uint16_t)(100U + i);
+        run_until(m_now + (i ? LIGHT_SENSOR_HAL_SAMPLE_TIME_MS : 0));
+        run_until(m_now + 180);
+        ASSERT_NE(nullptr, m_task);
+        taskParm_t p0 = {}, p1 = m_task_parm1.back();
+        m_task(p0, p1);                    // the task runs outside the event
+        EXPECT_EQ(i + 1U, light_sensor_on_reading_fake.call_count);
+        EXPECT_EQ(100U + i, light_sensor_on_reading_fake.arg0_val);
+    }
+}
+
 TEST_F(HalLightSensor, WhileGreenIsLitItBlinksOffOncePerAverageNotEverySample)
 {
     app_leds_green_is_lit_fake.return_val = true;

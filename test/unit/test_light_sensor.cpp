@@ -4,8 +4,9 @@
 
 /*
  * light_sensor.c + dh_control.c: what is around the control logic.  Upgrade from
- * the firmware with calibration, when a light follows the master, suspends in
- * milliseconds, and what the master feeds the logic.
+ * the firmware with calibration, when a light follows the master, when DH is
+ * disabled and enabled, suspends in milliseconds, one master per group, and the
+ * diagnostic packet.
  */
 
 extern "C" {
@@ -17,12 +18,14 @@ extern "C" {
 #include "../../Light/nwk_sensors/dh_control.h"
 void light_sensor_init(void);
 void execute_light_sensor_logic(light_sensor_info_t *light_sensor_info);
+void light_sensor_on_reading(uint16_t reading);
 bool suspend_light_sensor_control(uint32_t delay_ms);
-bool suspend_light_sensor_control_dimming(uint32_t delay_ms);
 bool allow_light_sensor_control(void);
-bool dh_rx_level_command(sl_zigbee_af_cluster_command_t *cmd);
+bool dh_rx_level_adjust(sl_zigbee_af_cluster_command_t *cmd);
 bool dh_rx_master_claim(sl_zigbee_af_cluster_command_t *cmd);
 void dh_set_master(bool enable);
+void dh_disable(void);
+void dh_enable(void);
 void save_light_lux_reference(uint16_t lux_ref);
 void set_dhs_time_stamp(void);
 }
@@ -46,7 +49,7 @@ FAKE_VALUE_FUNC(bool, is_app_flags_nonvol_set, uint32_t);
 FAKE_VALUE_FUNC(uint8_t, get_min_light_level);
 FAKE_VALUE_FUNC(uint8_t, get_max_light_level);
 FAKE_VALUE_FUNC(uint32_t, get_random_number, uint32_t, uint32_t);
-FAKE_VALUE_FUNC(bool, tx_dh_level, uint8_t, uint8_t);
+FAKE_VALUE_FUNC(bool, tx_dh_level_adjust, uint8_t, uint8_t, uint8_t);
 FAKE_VALUE_FUNC(bool, tx_dh_master_claim);
 FAKE_VALUE_FUNC(sl_802154_short_addr_t, sl_zigbee_get_node_id);
 FAKE_VOID_FUNC(move_to_level_dhs, uint8_t, uint16_t);
@@ -64,7 +67,8 @@ FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_print, const char *, ...);
   F(hal_light_sensor_init) F(hal_get_dim_pwm_255) F(get_time_ms) F(has_timed_out) F(addTask) F(removeTask) \
   F(get_present_network) F(read_on_off_attribute) F(read_light_level_attribute) F(device_is_in_a_group) \
   F(is_occ_mid_or_lower) F(set_app_flags_nonvol) F(is_app_flags_nonvol_set) \
-  F(get_min_light_level) F(get_max_light_level) F(get_random_number) F(tx_dh_level) F(tx_dh_master_claim) F(sl_zigbee_get_node_id) F(move_to_level_dhs) \
+  F(get_min_light_level) F(get_max_light_level) F(get_random_number) F(tx_dh_level_adjust) F(tx_dh_master_claim) \
+  F(sl_zigbee_get_node_id) F(move_to_level_dhs) \
   F(broadcast_monitor_get_traffic) F(sl_token_get_data) F(sl_token_set_data) \
   F(sl_zigbee_af_read_server_attribute) F(sl_zigbee_af_write_server_attribute) \
   F(dh_debug_send) F(sl_zigbee_app_debug_println) F(sl_zigbee_app_debug_print)
@@ -118,7 +122,7 @@ protected:
         hal_get_dim_pwm_255_fake.return_val = 100;
         get_max_light_level_fake.return_val = 204;
         get_min_light_level_fake.return_val = 0;
-        tx_dh_level_fake.return_val = true;
+        tx_dh_level_adjust_fake.return_val = true;
         tx_dh_master_claim_fake.return_val = true;
         sl_zigbee_get_node_id_fake.return_val = MY_NODE;
     }
@@ -139,18 +143,26 @@ protected:
         }
     }
 
+    // Started, nothing left over from the start, red not lit
     static void init_running(void)
     {
         light_sensor_init();
         past_suspends();
+        light_sensor_on_reading(0xFFFF);        // Uses up the "changed" mark of the suspend
     }
 
-    // Raw lux 3.5 x this in the logic
-    static void average(uint16_t lux)
+    // One sensor reading of this many lux, 2.5 s after the last
+    static void reading(uint32_t lux)
     {
-        light_sensor_info_t info = {};
-        info.mean_lux = (uint16_t)(lux * 2 / 7);
-        execute_light_sensor_logic(&info);
+        m_now += 2500UL;
+        run_tasks();
+        light_sensor_on_reading((uint16_t)(lux * 2 / 7));
+    }
+
+    static void pair(uint32_t lux)
+    {
+        reading(lux);
+        reading(lux);
     }
 
     static void rx_claim(sl_802154_short_addr_t from)
@@ -160,15 +172,15 @@ protected:
         EXPECT_TRUE(dh_rx_master_claim(&cmd));
     }
 
-    static void rx(uint8_t level, uint8_t ramp, sl_802154_short_addr_t from = LOWER_NODE)
+    static void rx(uint8_t current, uint8_t target, uint8_t duration_sec, sl_802154_short_addr_t from = LOWER_NODE)
     {
-        uint8_t bytes[7] = { 0, 0, 0, 0, 0, level, ramp };
+        uint8_t bytes[8] = { 0, 0, 0, 0, 0, current, target, duration_sec };
         sl_zigbee_af_cluster_command_t cmd = {};
         cmd.source = from;
         cmd.buffer = bytes;
         cmd.bufLen = sizeof(bytes);
         cmd.payloadStartIndex = 5;
-        dh_rx_level_command(&cmd);
+        dh_rx_level_adjust(&cmd);
     }
 };
 
@@ -206,59 +218,42 @@ TEST_F(LightSensor, TheOldDisabledFlagNoLongerStopsAFollower)
 {
     m_flags = B_DISABLE_LIGHT_SENSOR;
     init_running();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
 
 /* --------------------------------------------------------------- suspends in ms */
-TEST_F(LightSensor, PowerUpSuspendsDhForTwentySecondsNotHalfAnHour)
+TEST_F(LightSensor, PowerUpSuspendsDhForTwentySeconds)
 {
     light_sensor_init();
-    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 
     m_now += 19999UL;
     run_tasks();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 
     m_now += 1UL;
     run_tasks();
-    rx(120, 185);
-    EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
-}
-
-TEST_F(LightSensor, ADimmingSuspendOfTwoHoursLastsTwoHours)
-{
-    init_running();
-    suspend_light_sensor_control_dimming(2UL * 60UL * 60UL * 1000UL);
-
-    m_now += (2UL * 60UL * 60UL * 1000UL) - 1UL;
-    run_tasks();
-    rx(120, 185);
-    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
-
-    m_now += 1UL;
-    run_tasks();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
 
 TEST_F(LightSensor, AShorterSuspendDoesNotCutALongerOneShort)
 {
     init_running();
-    suspend_light_sensor_control(120000UL);    // A level command
+    suspend_light_sensor_control(120000UL);
     m_now += 1000UL;
-    suspend_light_sensor_control(2000UL);      // Then an occupancy move
+    suspend_light_sensor_control(2000UL);
     m_now += 3000UL;
     run_tasks();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 
     m_now += 116000UL;                         // 120 s after the first
     run_tasks();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
 
@@ -269,25 +264,46 @@ TEST_F(LightSensor, ALongerSuspendExtendsAShorterOne)
     suspend_light_sensor_control(120000UL);
     m_now += 3000UL;
     run_tasks();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
 /* --------------------------------------------------------------- following the master */
-TEST_F(LightSensor, ALightOnAtTheOnLevelFollowsTheLevelAndRamp)
+TEST_F(LightSensor, ALightOnAtTheOnLevelFollowsTheTargetLevelAndDuration)
 {
     init_running();
-    rx(120, 185);
+    rx(100, 120, 20);
     ASSERT_EQ(1u, move_to_level_dhs_fake.call_count);
     EXPECT_EQ(120, move_to_level_dhs_fake.arg0_val);
-    EXPECT_EQ(185, move_to_level_dhs_fake.arg1_val);
+    EXPECT_EQ(200, move_to_level_dhs_fake.arg1_val);       // Deciseconds
+}
+
+TEST_F(LightSensor, TheDurationIsTakenFromTheMessage)
+{
+    init_running();
+    rx(100, 120, 255);
+    EXPECT_EQ(2550, move_to_level_dhs_fake.arg1_val);
+}
+
+TEST_F(LightSensor, TheMastersCurrentLevelIsNotUsedByAReceiver)
+{
+    init_running();
+    rx(1, 120, 20);
+    EXPECT_EQ(120, move_to_level_dhs_fake.arg0_val);
+}
+
+TEST_F(LightSensor, LevelZeroIsIgnored)
+{
+    init_running();
+    rx(100, 0, 20);
+    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
 TEST_F(LightSensor, ALightFollowsWithoutBeingTheMasterOrHavingATarget)
 {
     m_token_lux = 0;
     init_running();
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
 
@@ -295,7 +311,7 @@ TEST_F(LightSensor, ALightThatIsOffStaysOff)
 {
     init_running();
     read_on_off_attribute_fake.return_val = 0;
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
@@ -303,33 +319,101 @@ TEST_F(LightSensor, ALightAtMidStaysAtMid)
 {
     init_running();
     is_occ_mid_or_lower_fake.return_val = true;
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
-TEST_F(LightSensor, ALightJustChangedOrDimmedByASwitchStaysAsItIs)
+TEST_F(LightSensor, ALightJustChangedStaysAsItIs)
 {
     init_running();
     suspend_light_sensor_control(3000UL);
-    rx(120, 185);
-    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
-    past_suspends();
-
-    suspend_light_sensor_control_dimming(3000UL);
-    rx(120, 185);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
 TEST_F(LightSensor, AShortMessageIsIgnored)
 {
     init_running();
-    uint8_t bytes[6] = { 0, 0, 0, 0, 0, 120 };
+    uint8_t bytes[7] = { 0, 0, 0, 0, 0, 100, 120 };
     sl_zigbee_af_cluster_command_t cmd = {};
     cmd.source = LOWER_NODE;
     cmd.buffer = bytes;
     cmd.bufLen = sizeof(bytes);
     cmd.payloadStartIndex = 5;
-    EXPECT_TRUE(dh_rx_level_command(&cmd));
+    EXPECT_TRUE(dh_rx_level_adjust(&cmd));
+    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
+}
+
+/* --------------------------------------------------------------- DH disabled */
+TEST_F(LightSensor, ADisabledFollowerIgnoresALevel)
+{
+    init_running();
+    dh_disable();
+    rx(100, 120, 20);
+    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
+}
+
+TEST_F(LightSensor, ADisabledMasterSendsNothing)
+{
+    m_flags = B_DHS_MASTER_LIGHT;
+    init_running();
+    dh_disable();
+    for(int i = 0; i < 40; i++)
+    {
+        reading(100);
+    }
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+}
+
+TEST_F(LightSensor, DhStaysDisabledUntilEnabledHoweverLongItIs)
+{
+    m_flags = B_DHS_MASTER_LIGHT;
+    init_running();
+    dh_disable();
+    m_now += 24UL * 60UL * 60UL * 1000UL;
+    run_tasks();
+    pair(100);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+
+    dh_enable();
+    pair(100);
+    EXPECT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+}
+
+TEST_F(LightSensor, ARestartEnablesDh)
+{
+    init_running();
+    dh_disable();
+    init_running();
+    rx(100, 120, 20);
+    EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
+}
+
+TEST_F(LightSensor, WritingATargetEnablesDh)
+{
+    init_running();
+    dh_disable();
+    save_light_lux_reference(800);
+    rx(100, 120, 20);
+    EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
+}
+
+TEST_F(LightSensor, BeingSelectedAsMasterEnablesDh)
+{
+    init_running();
+    dh_disable();
+    dh_set_master(true);
+    rx(100, 120, 20, MY_NODE);
+    EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
+}
+
+TEST_F(LightSensor, BeingDeselectedDoesNotEnableDh)
+{
+    m_flags = B_DHS_MASTER_LIGHT;
+    init_running();
+    dh_disable();
+    dh_set_master(false);
+    rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
 
@@ -349,62 +433,70 @@ TEST_F(LightSensor, TargetZeroStopsTheMaster)
     init_running();
     save_light_lux_reference(0);
     EXPECT_FALSE(allow_light_sensor_control());
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 20; i++)
     {
-        average(100);
+        reading(100);
     }
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
 }
 
 /* --------------------------------------------------------------- the master */
-TEST_F(LightSensor, TheMasterSendsWhenFarFromTheTargetAndALightThatIsNotDoesNot)
+TEST_F(LightSensor, TheMasterSendsAfterTwoReadingsAndALightThatIsNotDoesNot)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    average(350);    // Skipped: the power up suspend was in this average
-    average(350);
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
-    average(350);
-    ASSERT_EQ(1u, tx_dh_level_fake.call_count);
-    EXPECT_EQ(DH_RAMP_DS, tx_dh_level_fake.arg1_val);
-    EXPECT_GT(tx_dh_level_fake.arg0_val, 100);
+    reading(350);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+    reading(350);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+    EXPECT_EQ(100, tx_dh_level_adjust_fake.arg0_val);
+    EXPECT_GT(tx_dh_level_adjust_fake.arg1_val, 100);
+    EXPECT_EQ(DEFAULT_DH_RAMP_DURATION_SEC, tx_dh_level_adjust_fake.arg2_val);
 
-    RESET_FAKE(tx_dh_level);
+    RESET_FAKE(tx_dh_level_adjust);
     m_flags = 0;
-    for(int i = 0; i < 5; i++)
+    m_now += 30000UL;
+    for(int i = 0; i < 10; i++)
     {
-        average(350);
+        reading(350);
     }
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
 }
 
-TEST_F(LightSensor, AnAverageThatALightChangeFellIntoIsNotUsed)
+TEST_F(LightSensor, TheMasterDoesNotMoveItselfOnlyTheLoopbackDoes)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    average(350);
-    average(350);
-    suspend_light_sensor_control(1000UL);      // Over before the average ends ...
-    past_suspends();
-    average(350);                              // ... but it is in this one ...
-    average(350);                              // ... and could still be in this one
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
-    average(350);
-    EXPECT_EQ(1u, tx_dh_level_fake.call_count);
+    pair(350);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+    EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
+
+    rx(100, tx_dh_level_adjust_fake.arg1_val, 20, MY_NODE);
+    EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
 
-TEST_F(LightSensor, ARedFlashAlsoSpoilsTheAverage)
+TEST_F(LightSensor, AReadingAfterALightChangeIsNotUsed)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    average(350);
-    average(350);
+    reading(350);
+    suspend_light_sensor_control(1000UL);      // Over before the next reading ...
+    reading(350);                              // ... but it was in that reading
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+    pair(350);
+    EXPECT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+}
+
+TEST_F(LightSensor, ARedFlashAlsoSpoilsTheReading)
+{
+    m_flags = B_DHS_MASTER_LIGHT;
+    init_running();
+    reading(350);
     set_dhs_time_stamp();
-    average(350);
-    average(350);
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
-    average(350);
-    EXPECT_EQ(1u, tx_dh_level_fake.call_count);
+    reading(350);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+    pair(350);
+    EXPECT_EQ(1u, tx_dh_level_adjust_fake.call_count);
 }
 
 TEST_F(LightSensor, TheLevelNeverGoesBelowTenPercentWithMinLevelZero)
@@ -412,85 +504,164 @@ TEST_F(LightSensor, TheLevelNeverGoesBelowTenPercentWithMinLevelZero)
     m_flags = B_DHS_MASTER_LIGHT;
     hal_get_dim_pwm_255_fake.return_val = 30;
     init_running();
-    average(3000);
-    average(3000);
-    average(3000);
-    ASSERT_EQ(1u, tx_dh_level_fake.call_count);
-    EXPECT_EQ(MIN_ALLOWABLE_LIGHT_LEVEL, tx_dh_level_fake.arg0_val);
+    pair(3000);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+    EXPECT_EQ(MIN_ALLOWABLE_LIGHT_LEVEL, tx_dh_level_adjust_fake.arg1_val);
 }
 
-TEST_F(LightSensor, ARefusedSendRetriesThroughTheTasker)
+TEST_F(LightSensor, ARefusedLevelIsSentAgainAtTheNextAverage)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    average(350);
-    average(350);
-    tx_dh_level_fake.return_val = false;
-    average(350);
-    EXPECT_EQ(1u, tx_dh_level_fake.call_count);
+    tx_dh_level_adjust_fake.return_val = false;
+    pair(350);
+    EXPECT_EQ(1u, tx_dh_level_adjust_fake.call_count);
 
-    tx_dh_level_fake.return_val = true;
-    m_now += 2000UL;
-    run_tasks();
-    EXPECT_EQ(2u, tx_dh_level_fake.call_count);
+    tx_dh_level_adjust_fake.return_val = true;
+    pair(350);
+    EXPECT_EQ(2u, tx_dh_level_adjust_fake.call_count);
 }
 
-/* --------------------------------------------------------------- debug unicast */
-TEST_F(LightSensor, EachLevelSentAlsoSendsTheDebugData)
+/* --------------------------------------------------------------- diagnostic packet */
+class LightSensorDebug : public LightSensor
 {
-    m_flags = B_DHS_MASTER_LIGHT;
-    init_running();
-    average(350);
-    average(350);
+protected:
+    void SetUp() override
+    {
+        LightSensor::SetUp();
+        dh_debug_send_fake.return_val = true;
+        init_running();
+    }
+
+    // Readings until the next 20 s check has gone by, starting just after a check
+    static void one_check(uint32_t lux = 350)
+    {
+        for(unsigned i = 0; i < DH_DEBUG_CHECK_READINGS; i++)
+        {
+            reading(lux);
+        }
+    }
+
+    // Line up on the checks, and the level in the last packet
+    static void settle(void)
+    {
+        for(unsigned i = 0; i < (DH_DEBUG_CHECK_READINGS * (DH_DEBUG_QUIET_CHECKS + 1U)); i++)
+        {
+            reading(350);
+            if(0u != dh_debug_send_fake.call_count)
+            {
+                break;
+            }
+        }
+        RESET_FAKE(dh_debug_send);
+        dh_debug_send_fake.return_val = true;
+    }
+};
+
+TEST_F(LightSensorDebug, NoLevelChangeSendsEvery120Seconds)
+{
+    settle();
+    for(unsigned i = 0; i < DH_DEBUG_QUIET_CHECKS - 1U; i++)
+    {
+        one_check();
+    }
     EXPECT_EQ(0u, dh_debug_send_fake.call_count);
-    average(350);
-    ASSERT_EQ(1u, tx_dh_level_fake.call_count);
-    ASSERT_EQ(1u, dh_debug_send_fake.call_count);
-    EXPECT_EQ(350, dh_debug_send_fake.arg0_val);
-    EXPECT_EQ(500, dh_debug_send_fake.arg1_val);
-    EXPECT_EQ(100, dh_debug_send_fake.arg2_val);
-    EXPECT_EQ(DH_DEBUG_MODE_MASTER, dh_debug_send_fake.arg3_val);
-    EXPECT_EQ(tx_dh_level_fake.arg0_val, dh_debug_send_fake.arg4_val);
-}
-
-TEST_F(LightSensor, ARefusedLevelSendsNoDebugDataUntilItGoesOut)
-{
-    m_flags = B_DHS_MASTER_LIGHT;
-    init_running();
-    average(350);
-    average(350);
-    tx_dh_level_fake.return_val = false;
-    average(350);
-    EXPECT_EQ(0u, dh_debug_send_fake.call_count);
-
-    tx_dh_level_fake.return_val = true;
-    m_now += 2000UL;
-    run_tasks();
+    one_check();
     EXPECT_EQ(1u, dh_debug_send_fake.call_count);
+    EXPECT_EQ(120000u, DH_DEBUG_QUIET_CHECKS * DH_DEBUG_CHECK_READINGS * 2500u);
 }
 
-TEST_F(LightSensor, TheRepeatOfALevelAlsoSendsTheDebugData)
+TEST_F(LightSensorDebug, ALevelChangeSendsAtTheNext20SecondCheck)
 {
-    m_flags = B_DHS_MASTER_LIGHT;
-    init_running();
-    average(350);
-    average(350);
-    average(350);
-    average(500);
-    average(500);
-    average(500);      // In the deadband: the repeat
-    EXPECT_EQ(2u, tx_dh_level_fake.call_count);
+    settle();
+    hal_get_dim_pwm_255_fake.return_val = 110;
+    one_check();
+    ASSERT_EQ(1u, dh_debug_send_fake.call_count);
+    EXPECT_EQ(110, dh_debug_send_fake.arg2_val);
+    EXPECT_EQ(20000u, DH_DEBUG_CHECK_READINGS * 2500u);
+
+    hal_get_dim_pwm_255_fake.return_val = 120;
+    one_check();
+    EXPECT_EQ(2u, dh_debug_send_fake.call_count);
+
+    one_check();                                   // No change: back to the slow rate
     EXPECT_EQ(2u, dh_debug_send_fake.call_count);
 }
 
-TEST_F(LightSensor, NoDebugDataOnAnAverageWithoutALevel)
+TEST_F(LightSensorDebug, ALevelChangeRestartsThe120Seconds)
 {
-    m_flags = B_DHS_MASTER_LIGHT;
-    init_running();
-    for(int i = 0; i < 6; i++)
+    settle();
+    one_check();
+    one_check();
+    hal_get_dim_pwm_255_fake.return_val = 110;
+    one_check();
+    ASSERT_EQ(1u, dh_debug_send_fake.call_count);
+    for(unsigned i = 0; i < DH_DEBUG_QUIET_CHECKS - 1U; i++)
     {
-        average(500);
+        one_check();
     }
+    EXPECT_EQ(1u, dh_debug_send_fake.call_count);
+    one_check();
+    EXPECT_EQ(2u, dh_debug_send_fake.call_count);
+}
+
+TEST_F(LightSensorDebug, APacketThatIsNotSentIsTriedAgainAtTheNextCheck)
+{
+    settle();
+    dh_debug_send_fake.return_val = false;         // No target yet, or refused
+    for(unsigned i = 0; i < DH_DEBUG_QUIET_CHECKS; i++)
+    {
+        one_check();
+    }
+    EXPECT_EQ(1u, dh_debug_send_fake.call_count);
+    one_check();
+    EXPECT_EQ(2u, dh_debug_send_fake.call_count);
+
+    dh_debug_send_fake.return_val = true;
+    one_check();
+    EXPECT_EQ(3u, dh_debug_send_fake.call_count);
+    one_check();                                   // Sent: back to the slow rate
+    EXPECT_EQ(3u, dh_debug_send_fake.call_count);
+}
+
+TEST_F(LightSensorDebug, ThePacketHasTheLuxTargetLevelAndFlags)
+{
+    settle();
+    dh_disable();
+    for(unsigned i = 0; i < DH_DEBUG_QUIET_CHECKS; i++)
+    {
+        one_check(700);
+    }
+    ASSERT_EQ(1u, dh_debug_send_fake.call_count);
+    EXPECT_EQ(700, dh_debug_send_fake.arg0_val);   // The last 2 readings
+    EXPECT_EQ(500, dh_debug_send_fake.arg1_val);
+    EXPECT_EQ(100, dh_debug_send_fake.arg2_val);
+    EXPECT_EQ(DH_DEBUG_MODE_DH_DISABLED, dh_debug_send_fake.arg3_val);
+    EXPECT_EQ(0, dh_debug_send_fake.arg4_val);     // Has not sent a level
+}
+
+TEST_F(LightSensorDebug, TheMastersPacketHasTheLastLevelItSent)
+{
+    settle();
+    m_flags = B_DHS_MASTER_LIGHT;       // After settle(), so its readings send no level
+    pair(100);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+    uint8_t sent = tx_dh_level_adjust_fake.arg1_val;
+    RESET_FAKE(dh_debug_send);
+    dh_debug_send_fake.return_val = true;
+    hal_get_dim_pwm_255_fake.return_val = sent;
+    one_check();
+    ASSERT_EQ(1u, dh_debug_send_fake.call_count);
+    EXPECT_EQ(DH_DEBUG_MODE_MASTER, dh_debug_send_fake.arg3_val);
+    EXPECT_EQ(sent, dh_debug_send_fake.arg4_val);
+}
+
+TEST_F(LightSensorDebug, SendingALevelDoesNotItselfSendAPacket)
+{
+    settle();
+    m_flags = B_DHS_MASTER_LIGHT;       // After settle(), so its readings send no level
+    pair(350);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
     EXPECT_EQ(0u, dh_debug_send_fake.call_count);
 }
 
@@ -529,11 +700,11 @@ TEST_F(LightSensor, ASecondMasterStopsSending)
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
     rx_claim(LOWER_NODE);
-    for(int i = 0; i < 6; i++)
+    for(int i = 0; i < 20; i++)
     {
-        average(350);
+        reading(350);
     }
-    EXPECT_EQ(0u, tx_dh_level_fake.call_count);
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
 }
 
 TEST_F(LightSensor, AMasterKeepsTheSettingOnHearingItsOwnClaim)
@@ -555,7 +726,7 @@ TEST_F(LightSensor, TwoMastersTheHigherNodeIdStandsDownOnHearingALevel)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    rx(120, 185, LOWER_NODE);
+    rx(100, 120, 20, LOWER_NODE);
     EXPECT_FALSE(flag_set(B_DHS_MASTER_LIGHT));
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);     // and it follows like any other light
 }
@@ -564,7 +735,7 @@ TEST_F(LightSensor, TwoMastersTheLowerNodeIdStaysTheMaster)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    rx(120, 185, HIGHER_NODE);
+    rx(100, 120, 20, HIGHER_NODE);
     EXPECT_TRUE(flag_set(B_DHS_MASTER_LIGHT));
 }
 
@@ -572,7 +743,7 @@ TEST_F(LightSensor, AMasterHearingItsOwnLevelStaysTheMasterAndMoves)
 {
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
-    rx(120, 185, MY_NODE);
+    rx(100, 120, 20, MY_NODE);
     EXPECT_TRUE(flag_set(B_DHS_MASTER_LIGHT));
     EXPECT_EQ(1u, move_to_level_dhs_fake.call_count);
 }
@@ -582,7 +753,7 @@ TEST_F(LightSensor, ALevelFromAnotherMasterStandsDownEvenWhileThisLightIgnoresTh
     m_flags = B_DHS_MASTER_LIGHT;
     init_running();
     is_occ_mid_or_lower_fake.return_val = true;
-    rx(120, 185, LOWER_NODE);
+    rx(100, 120, 20, LOWER_NODE);
     EXPECT_FALSE(flag_set(B_DHS_MASTER_LIGHT));
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
 }
@@ -596,16 +767,14 @@ TEST_F(LightSensor, AMasterHeldAtItsFiftyPercentLimitStillRaisesTheRestOfTheGrou
     get_max_light_level_fake.return_val = 102;
     hal_get_dim_pwm_255_fake.return_val = 102;
     init_running();
-    average(100);
-    average(100);
-    average(100);
-    ASSERT_EQ(1u, tx_dh_level_fake.call_count);
-    uint8_t first = tx_dh_level_fake.arg0_val;
+    pair(100);
+    ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+    uint8_t first = tx_dh_level_adjust_fake.arg1_val;
     EXPECT_GT(first, 102);                     // Above its own limit: the group's level
 
-    average(100);
-    average(100);
-    average(100);                              // This light is still at 102
-    ASSERT_EQ(2u, tx_dh_level_fake.call_count);
-    EXPECT_GT(tx_dh_level_fake.arg0_val, first);
+    while(1u == tx_dh_level_adjust_fake.call_count)
+    {
+        reading(100);                          // This light is still at 102
+    }
+    EXPECT_GT(tx_dh_level_adjust_fake.arg1_val, first);
 }

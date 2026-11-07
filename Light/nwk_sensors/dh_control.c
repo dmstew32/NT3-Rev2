@@ -1,16 +1,19 @@
 #include "dh_control.h"
 
-uint8_t dh_next_level(uint8_t level, uint16_t lux, uint16_t target, uint8_t floor, uint8_t ceiling)
+uint32_t dh_calibrated_lux(uint32_t sensor_lux)
 {
-  int32_t present = (int32_t)level;
-  int32_t desired = (present * (int32_t)target) / (int32_t)((0U == lux) ? 1U : lux);
-  int32_t step = (desired - present) / 2L;
-  int32_t limit = (present * (int32_t)DH_MAX_STEP_PERCENT) / 100L;
+  return((uint32_t)((float)sensor_lux * CALIBRATED_LUX_FACTOR));
+}
 
-  if(1L > limit)
-  {
-     limit = 1L;
-  }
+uint8_t dh_next_level(uint8_t current_level, uint16_t target_lux, uint32_t sensor_average_lux,
+                      uint8_t floor, uint8_t ceiling)
+{
+  int32_t current = (int32_t)current_level;
+  uint32_t calibrated_lux = dh_calibrated_lux(sensor_average_lux);
+  int32_t desired = (current * (int32_t)target_lux) / (int32_t)((0UL == calibrated_lux) ? 1UL : calibrated_lux);
+  int32_t step = (desired - current) / 2L;
+  int32_t limit = (current * (int32_t)DH_MAX_STEP_PERCENT) / 100L;
+
   if(limit < step)
   {
      step = limit;
@@ -19,13 +22,8 @@ uint8_t dh_next_level(uint8_t level, uint16_t lux, uint16_t target, uint8_t floo
   {
      step = -limit;
   }
-  else if((0L == step) && (desired != present))
-  {
-     // Under half a level from the target: still move, or the level never gets there
-     step = (desired > present) ? 1L : -1L;
-  }
 
-  int32_t next = present + step;
+  int32_t next = current + step;
 
   if((int32_t)floor > next)
   {
@@ -35,31 +33,14 @@ uint8_t dh_next_level(uint8_t level, uint16_t lux, uint16_t target, uint8_t floo
   {
      next = (int32_t)ceiling;
   }
+
+  int32_t change = (next > current) ? (next - current) : (current - next);
+
+  if((change * 100L) <= (current * (int32_t)DH_MIN_STEP_PERCENT))
+  {
+     return(current_level);
+  }
   return((uint8_t)next);
-}
-
-// False = no attempts left
-static bool retry_later(dh_master_t *m, uint8_t *attempts)
-{
-  const dh_ops_t *ops = m->ops;
-
-  (*attempts)++;
-  if(DH_SEND_ATTEMPTS <= *attempts)
-  {
-     return(false);
-  }
-  ops->schedule_retry(ops->ctx, (DH_RETRY_MS - DH_RETRY_JITTER_MS)
-                                + ops->random_ms(ops->ctx, 2UL * DH_RETRY_JITTER_MS));
-  return(true);
-}
-
-static void level_retry_later(dh_master_t *m)
-{
-  if(!retry_later(m, &m->attempts))
-  {
-     // Give up.  A new level is worked out again at the next average.
-     m->sending = false;
-  }
 }
 
 static void attempt_claim(dh_master_t *m)
@@ -70,107 +51,68 @@ static void attempt_claim(dh_master_t *m)
   if(!held && ops->send_master_claim(ops->ctx))
   {
      m->claiming = false;
+     return;
   }
-  else if(!retry_later(m, &m->claim_attempts))
+
+  m->claim_attempts++;
+  if(DH_SEND_ATTEMPTS <= m->claim_attempts)
   {
      // Give up.  A second master still stands down on hearing a level from the other.
      m->claiming = false;
-  }
-}
-
-static void attempt_send(dh_master_t *m)
-{
-  const dh_ops_t *ops = m->ops;
-
-  if((DH_HEAVY_HOLD_ATTEMPTS > m->attempts) && ops->broadcast_traffic_heavy(ops->ctx))
-  {
-     level_retry_later(m);
      return;
   }
-  if(!ops->send_level(ops->ctx, m->send_level, (uint8_t)DH_RAMP_DS))
-  {
-     level_retry_later(m);
-     return;
-  }
-
-  m->sending = false;
-  m->last_level = m->send_level;
-  m->repeat_pending = !m->sending_repeat;
-  m->skip_averages = DH_SKIP_AFTER_SEND;
-  m->quiet_averages = 0U;
-}
-
-static void start_send(dh_master_t *m, uint8_t level, bool repeat)
-{
-  m->sending = true;
-  m->sending_repeat = repeat;
-  m->send_level = level;
-  m->attempts = 0U;
-  m->repeat_pending = false;
-  attempt_send(m);
+  ops->schedule_retry(ops->ctx, (DH_RETRY_MS - DH_RETRY_JITTER_MS)
+                                + ops->random_ms(ops->ctx, 2UL * DH_RETRY_JITTER_MS));
 }
 
 void dh_master_init(dh_master_t *m, const dh_ops_t *ops)
 {
   m->ops = ops;
-  m->skip_averages = DH_SKIP_AFTER_CHANGE;
-  m->repeat_pending = false;
+  m->ramp_timer_active = false;
+  m->ramp_end_ms = 0UL;
+  m->have_first_reading = false;
+  m->first_reading = 0U;
   m->last_level = 0U;
-  m->quiet_averages = 0U;
-  m->sending = false;
-  m->sending_repeat = false;
-  m->send_level = 0U;
-  m->attempts = 0U;
   m->claiming = false;
   m->claim_attempts = 0U;
 }
 
-void dh_master_on_average(dh_master_t *m, const dh_average_t *in)
+void dh_master_on_reading(dh_master_t *m, const dh_reading_t *in)
 {
   if(!in->allowed)
   {
-     m->sending = false;
-     m->repeat_pending = false;
-     if(DH_SKIP_AFTER_CHANGE > m->skip_averages)
-     {
-        m->skip_averages = DH_SKIP_AFTER_CHANGE;
-     }
+     m->have_first_reading = false;
      return;
   }
-  if(m->sending)
+  if(m->ramp_timer_active)
   {
-     return;     // Retries still running
+     if(0L > (int32_t)(in->now_ms - m->ramp_end_ms))
+     {
+        return;     // Ramping: discard
+     }
+     m->ramp_timer_active = false;
   }
-  if(0U != m->skip_averages)
+  if(!m->have_first_reading)
   {
-     m->skip_averages--;
+     m->first_reading = in->reading;
+     m->have_first_reading = true;
      return;
   }
+  m->have_first_reading = false;
 
-  uint16_t error = (in->lux > in->target) ? (in->lux - in->target) : (in->target - in->lux);
-  uint8_t next = in->level;
+  uint32_t average = ((uint32_t)m->first_reading + (uint32_t)in->reading) / DH_READINGS_PER_AVERAGE;
 
-  if(DH_LUX_DEADBAND < error)
-  {
-     next = dh_next_level(in->level, in->lux, in->target, in->floor, in->ceiling);
-  }
+  uint8_t next = dh_next_level(in->level, in->target_lux, average, in->floor, in->ceiling);
 
-  if(next != in->level)
+  if(next == in->level)
   {
-     start_send(m, next, false);
+     return;
   }
-  else if(m->repeat_pending)
+  if(m->ops->send_level(m->ops->ctx, in->level, next, (uint8_t)DEFAULT_DH_RAMP_DURATION_SEC))
   {
-     start_send(m, m->last_level, true);
-  }
-  else
-  {
-     m->quiet_averages++;
-     if(DH_REFRESH_AVERAGES <= m->quiet_averages)
-     {
-        // The present level, not a change.  It doesn't need a repeat.
-        start_send(m, in->level, true);
-     }
+     m->last_level = next;
+     m->ramp_timer_active = true;
+     m->ramp_end_ms = in->now_ms + ((uint32_t)DEFAULT_DH_RAMP_DURATION_SEC * 1000UL);
   }
 }
 
@@ -183,27 +125,16 @@ void dh_master_claim(dh_master_t *m)
 
 void dh_master_stop(dh_master_t *m)
 {
-  m->sending = false;
-  m->repeat_pending = false;
+  m->have_first_reading = false;
   m->claiming = false;
 }
 
-void dh_master_retry(dh_master_t *m, bool allowed)
+void dh_master_retry(dh_master_t *m)
 {
   if(m->claiming)
   {
      attempt_claim(m);
   }
-  if(!m->sending)
-  {
-     return;
-  }
-  if(!allowed)
-  {
-     m->sending = false;     // Whatever stopped DH, the level is out of date
-     return;
-  }
-  attempt_send(m);
 }
 
 uint8_t dh_master_last_level(const dh_master_t *m)

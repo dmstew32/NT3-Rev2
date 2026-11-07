@@ -334,7 +334,7 @@ uint8_t get_number_of_multicast_bindings(void);
 void get_multicast_info(uint8_t index, device_binding_info_t *info);
 bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level);
 bool tx_occ_level_change(uint8_t state, uint8_t level);
-bool tx_dh_level(uint8_t level, uint8_t ramp_ds);
+bool tx_dh_level_adjust(uint8_t current_level, uint8_t target_level, uint8_t duration_sec);
 bool tx_dh_master_claim(void);
 
 // daylight harvesting (light_on_off.h, nwk_utils.h, hal_pwm.h, occ_sensor.h)

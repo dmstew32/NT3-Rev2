@@ -13,7 +13,9 @@
  *
  * While green is lit (occupancy) a dark reading is taken only every
  * LIGHT_SENSOR_LIT_READ_MS; the readings in between repeat the last one, so
- * green blinks off once per average instead of every sample.
+ * green blinks off once per average instead of every sample.  The daylight
+ * harvesting master always reads, so its green blinks off every sample (which
+ * also shows which light is the master).
  */
 #include <stdlib.h>
 #include "af.h"
@@ -25,6 +27,7 @@
 #include "zap-id.h"
 #include "hal_light_sensor.h"
 #include "light_sensor.h"
+#include "nwk_utils.h"
 #include "RehTOS.h"
 #include "app_leds.h"
 
@@ -71,6 +74,8 @@ static void update_light_sensor_task(taskParm_t parm0, taskParm_t parm1)
   light_sensor_info.index++;
   light_sensor_info.index &= LIGHT_SAMPLE_MASK;
 
+  light_sensor_on_reading(new_reading);
+
   if(0 == light_sensor_info.index)
   {
      for(uint8_t i = 0; i < N_LIGHT_SAMPLES; i++)
@@ -110,7 +115,7 @@ static void light_sensor_read_handler(sl_zigbee_af_event_t *event)
   (void)event;
   if(!light_sensor_measuring)
   {
-     if(app_leds_green_is_lit() && light_sensor_have_reading &&
+     if(app_leds_green_is_lit() && light_sensor_have_reading && !is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT) &&
         !has_timed_out(light_sensor_dark_read_ms, LIGHT_SENSOR_LIT_READ_MS))
      {
         // Green lit: repeat the last reading, don't blink it off

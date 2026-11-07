@@ -291,19 +291,22 @@ The D-button delays do not apply on Daintree (button settings are rejected).
 
 - The group's **master** is selected with the buttons (T×3 + D×3, off by
   default). The light selected last is the master: it tells the group, and any
-  other master stops. The **target lux** is set by the Twitch only: 0 (off), 300, 500 or
-  800. There is no calibration.
+  other master stops. Its green LED turns off for about 200 ms every 2.5 s during
+  occupancy, which also shows which light is the master.
+- The **target lux** is set by the Twitch only: 0 (off), 300, 500 or 800. There is
+  no calibration.
 - The master runs only when **all** of these are true: Adaptiv network, grouped,
   a target that is not 0, light on, occupancy state ON (not mid or off), not
-  suspended, and level at least the minimum allowed.
-- The master averages its lux readings (8 readings over 20 s). At most once
-  every 60 s, if the mean is more than 50 lux from the target, it multicasts a
-  new level: halfway to `level × target / lux`, at most 30 % of the level per
-  update. The group ramps over 18.5 s. The last new level is sent once more for a
-  light that missed it, and the present level is sent again about every 10
-  minutes for a light that restarted.
-- A light that is off, at mid, suspended or recently dimmed by a switch ignores
-  the level. Details: `NT3_Daylight_Harvesting.md`.
+  suspended, level at least the minimum allowed, and DH not disabled.
+- The master reads lux every 2.5 s and averages every 2 readings. It multicasts a
+  new level if the change is more than 5 %: halfway to `level × target / lux`, at
+  most 30 % of the level. The group ramps over 20 s, and readings during the ramp
+  are discarded. There is no repeat or refresh.
+- A light that is off, at mid, suspended or has DH disabled ignores the level.
+- **DH is disabled** by a received level command, on/off command or scene recall,
+  or the D hold on that light. **It is enabled again** when the lights were off and
+  occupancy turns them on, or by selecting a master, writing a target, or a
+  restart. Details: `NT3_Daylight_Harvesting.md`.
 - Not used on Daintree, unknown or not-joined lights (readings are still
   taken; on Daintree the lux value is reported as an attribute).
 
@@ -372,7 +375,7 @@ the new setting is multicast to every light in the group.
 | 9 | 0 = **occupancy sensor off** | 31 s |
 | 10 | 2 h (temporary, see 5.3) | 5 min |
 | 11 | sensitivity: threshold 80 (normal) | – |
-| 12 | sensitivity: threshold 60 (more sensitive) | – |
+| 12 | sensitivity: threshold 40 (more sensitive) | – |
 | 6, 7 | rejected | |
 
 | T presses (D = 0) | Max | Mid | Min |

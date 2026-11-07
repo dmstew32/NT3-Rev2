@@ -882,13 +882,8 @@ static void startServerDiscovery(void)
   otaPrintln("startServerDiscovery");
 #endif // ADAPTIV_LIGHT
   if (discoverBusy) {
-#ifdef ADAPTIV_LIGHT
-    otaPrintln("OTA Service discovery prevented - another is already in progress   <%d>", get_time_ms());
-    return;
-#else  // ADAPTIV_LIGHT
     otaPrintln("OTA Service discovery prevented - another is already in progress");
     return;
-#endif // ADAPTIV_LIGHT
   }
   recordUpgradeStatus(BOOTLOAD_STATE_DISCOVER_SERVER);
   serverEndpoint = UNDEFINED_ENDPOINT;

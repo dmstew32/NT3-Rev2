@@ -255,10 +255,10 @@ bool tx_color_new_temp(uint16_t new_color)
 }
 
 // Daylight harvesting master: the group's new level.  False = the stack refused it.
-// Send ZCL_DH_LEVEL_COMMAND_ID to ZCL_ILLUM_MEASUREMENT_CLUSTER_ID
-bool tx_dh_level(uint8_t level, uint8_t ramp_ds)
+// Send ZCL_DH_LEVEL_ADJUST_COMMAND_ID to ZCL_ILLUM_MEASUREMENT_CLUSTER_ID
+bool tx_dh_level_adjust(uint8_t current_level, uint8_t target_level, uint8_t duration_sec)
 {
-  uint8_t message[7] = {0};
+  uint8_t message[8] = {0};
 
   if(eADAPTIV_NWK != get_present_network())
   {
@@ -273,10 +273,11 @@ bool tx_dh_level(uint8_t level, uint8_t ramp_ds)
   message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[3] = sl_zigbee_af_next_sequence();
-  message[4] = ZCL_DH_LEVEL_COMMAND_ID;
+  message[4] = ZCL_DH_LEVEL_ADJUST_COMMAND_ID;
   // Payload
-  message[5] = level;
-  message[6] = ramp_ds;     // Deciseconds
+  message[5] = current_level;
+  message[6] = target_level;
+  message[7] = duration_sec;
 
   return(tx_multicast(&apsFrame, &message[0], sizeof(message)));
 }

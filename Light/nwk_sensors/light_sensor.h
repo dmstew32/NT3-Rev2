@@ -17,17 +17,16 @@ void start_reading_light_sensor(void);
 void stop_reading_light_sensor(void);
 void execute_light_sensor_logic(light_sensor_info_t *light_sensor_info);
 
-// A network level command: someone chose this level
-#define DH_SUSPEND_AFTER_LEVEL_CMD_MS (120000UL)
-
 bool suspend_light_sensor_control(uint32_t delay_ms);
-bool suspend_light_sensor_control_dimming(uint32_t delay_ms);
 
 bool allow_light_sensor_control(void);
 
-bool dh_rx_level_command(sl_zigbee_af_cluster_command_t* cmd);
+bool dh_rx_level_adjust(sl_zigbee_af_cluster_command_t* cmd);
 bool dh_rx_master_claim(sl_zigbee_af_cluster_command_t* cmd);
 void dh_set_master(bool enable);
+void dh_disable(void);
+void dh_enable(void);
+void light_sensor_on_reading(uint16_t reading);
 
 uint16_t read_light_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID);
 bool write_light_sensor_attribute( sl_zigbee_af_attribute_id_t attributeID, uint16_t data);
