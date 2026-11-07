@@ -1,39 +1,33 @@
 # NT-3 Light: Daylight Harvesting
 
 This document describes how daylight harvesting (DH) works in the NT-3 light
-firmware today, read from the source code. It covers normal operation once a
-group has a DH master. The calibration process that currently chooses the
-master is being replaced by a direct master selection, so it is only
-summarized (appendix A).
+firmware, read from the source code. It has not yet been tested on real lights.
+`NT3_DH_Summary.md` is the short version.
 
-- **Firmware:** branch `main`, commit `50fc164`, plus the working-tree
-  changes of November 2026 (the occupancy send retry and the version changes).
-  The DH code itself is unchanged from `50fc164`.
-- **Source of truth:** the code. Where this document says "today", that is
-  what the code does, not necessarily what was intended. Section 10 lists
-  behaviors that look unintended or worth a decision.
-- **Main files:** `Light/nwk_sensors/light_sensor.c` (DH logic),
-  `Light/hal/hal_light_sensor.c` (sensor sampling), `Light/nwk_config/nwk_multicast.c`
-  (the DH multicast), `level-control.c` in the SDK copy (`move_to_level_dhs()`
-  and the DH suspends).
-- **Levels** are Zigbee/PWM levels 0–254 (254 = 100 %, 25 = 10 %).
+- **Main files:** `Light/nwk_sensors/dh_control.c` (the master's sampling and
+  algorithm), `Light/nwk_sensors/light_sensor.c` (what surrounds it),
+  `Light/hal/hal_light_sensor.c` (sensor readings),
+  `Light/nwk_config/nwk_multicast.c` (the multicasts),
+  `Light/nwk_mgmt/dh_debug.c` (the diagnostic unicast), `level-control.c`,
+  `on-off.c` and `scenes.c` in the SDK copy (what disables DH),
+  `Light/occupancy/occ_group.c` (what enables it),
+  `Light/buttons/button_actions.c` (master selection).
+- **Levels** are Zigbee levels 1–255. Level 0 is never sent.
 
 ---
 
 ## 1. Overview
 
-Daylight harvesting only runs on an **Adaptiv network**, in a **grouped**
-light. One light in the group is the **DH master**. It is the only light
-whose sensor is used:
+DH only runs on an **Adaptiv network**, in a **grouped** light. There is no
+calibration. One light in the group is the **DH master**, chosen with the buttons.
+It is the only light whose sensor is used for control.
 
-1. Every light measures lux, but only the master uses it to control.
-2. Every 20 s the master compares its lux with the **lux reference** and, if
-   the difference is large enough, works out a new light level.
-3. The master multicasts that level to the group (one message).
-4. Every light in the group, the master included, ramps to that level over
-   18.5 s.
-
-The other lights never send DH messages in normal operation.
+1. The master reads lux every 2.5 s and averages every 2 readings.
+2. It runs each average through the algorithm.
+3. If the level would change by more than 5 %, it multicasts a DH Level Adjust.
+4. Every light that is able to follow, the master included, ramps to that level
+   over 20 s.
+5. Readings during the ramp are discarded.
 
 ---
 
@@ -41,272 +35,278 @@ The other lights never send DH messages in normal operation.
 
 | Item | Where it is set | Values |
 |---|---|---|
-| Lux reference | Adaptiv configuration cluster, attribute `ZCL_LIGHT_SENSOR_ATTRIBUTE_ID` → `save_light_lux_reference()`; saved in `TOKEN_APP_LIGHT_SENSOR_LUX` | 0, 300, 500 or 800 lux. Any other value becomes 300. **0 turns DH off** (sets `B_DISABLE_LIGHT_SENSOR`). |
-| DH master | Flag `B_DHS_MASTER_LIGHT` (non-volatile app flags) | Set by calibration today (`am_i_master()`). |
-| Calibrated | Flag `B_DHS_CALIBRATED` | Set when calibration finishes. A light that is not calibrated neither controls nor follows. |
-| Gain | `TOKEN_APP_DHS_GAIN` (int16, default 1) | Set by calibration (`am_i_master()`), see section 5. |
-| Disabled | Flag `B_DISABLE_LIGHT_SENSOR` | Set by a lux reference of 0, and during calibration. |
+| Target lux | Twitch only, sent to the whole group: Adaptiv configuration cluster, attribute `ZCL_LIGHT_SENSOR_ATTRIBUTE_ID` → `save_light_lux_reference()`; saved in `TOKEN_APP_LIGHT_SENSOR_LUX` | 0 (default, DH off), 300, 500 or 800 lux. Any other value becomes 300. Only the master's target is used. A light added to the group later has 0 until the Twitch sends the target again, so if it is then selected as master, DH stays off. |
+| DH master | **T×3 + D×3** buttons, flag `B_DHS_MASTER_LIGHT` (non-volatile) | Off by default. The sequence toggles it. |
 
-Today, writing a non-zero lux reference **starts calibration**
-(`save_light_lux_reference()` clears the master and calibrated flags and enters
-`dhs_init_cal_state`). With the new master selection, writing the reference
-should only change the reference.
+| Master toggle result | Red LED | Main light |
+|---|---|---|
+| Now the master | Blinks 3× | Blinks 3×, then returns to its prior level |
+| No longer the master | Blinks 3× | No change |
+| Not in a group on an Adaptiv network | Fail indication | No change, setting unchanged |
+
+**One master per group:** the light selected last is the master.
+
+1. A light that becomes the master multicasts a claim (section 7), retried about
+   once a second up to 5 attempts. Any other master that hears it stops being the
+   master, with no indication. The new master's blink is the confirmation.
+2. If a master misses the claim (powered off, message lost), both run until one
+   hears a level from the other. The one with the higher node ID then stops being
+   the master. In this case the light left as master may not be the one selected
+   last, but the group has one working master.
 
 ---
 
-## 3. Measuring lux (every light)
-
-Defined in `Light/hal/hal_light_sensor.h`; `NEW_DHS` is defined in
-`NT_3_app.h`, which selects these values:
+## 3. Sampling
 
 | Item | Value |
 |---|---|
-| Sensor reading | every 2.5 s (`LIGHT_SENSOR_HAL_SAMPLE_TIME_MS`) |
-| Average | 8 readings (`N_LIGHT_SAMPLES`) |
-| DH logic runs | every **20 s** (`LIGHT_SENSOR_UPDATE_AVERAGE_MS`), when the 8-reading buffer wraps |
-| Calibration sampling | every 500 ms (4 s average) |
+| Sensor check | every 2.5 s (`LIGHT_SENSOR_HAL_SAMPLE_TIME_MS`) |
+| Measurement | about 180 ms, with the green LED off |
 
-- Readings are taken with the green LED off, so the LED does not light the
-  sensor. While the green LED is lit, one dark reading per 20 s is taken and
-  repeated (`light_sensor_read_handler()`).
-- **Lux used by DH:** on Adaptiv, `lux = 3.5 × raw average`. (Daintree uses a
-  piecewise curve, but DH does not run on Daintree.)
-- **Illuminance attribute** (endpoint 3, cluster 0x0400, Measured Value):
-  `10000 × log10(lux) + 1`, updated every 20 s on every network. This is for
-  gateways; DH does not use it.
+**The master** takes a real reading at every check. During occupancy, its green LED
+goes off for about 200 ms every 2.5 s, which also shows which light is the master.
+This applies whenever the master setting is on, even when DH can't currently act.
+
+**Other lights** keep the earlier behaviour: while green is lit, one real reading
+per 20 s, with the rest repeating it.
+
+**Illuminance attribute** (endpoint 3, cluster 0x0400, Measured Value): every light
+still updates this from an 8-reading average every 20 s, on every network. DH does
+not use it.
+
+**Discarded readings:** a reading is discarded, along with the first half of its
+pair, if DH isn't allowed (section 5), or if since the last reading something changed
+the light (a suspend) or lit the red LED, which reaches the sensor.
 
 ---
 
-## 4. When DH is allowed
+## 4. The algorithm
 
-`allow_light_sensor_control()` returns true only when all of these inhibit
-bits are clear (`get_dhs_inhibit_bits()`). The master checks them every 20 s.
+`dh_next_level()`, with every 2-reading average:
+
+```
+calibrated_lux = sensor_average_lux × CALIBRATED_LUX_FACTOR
+desired_level  = current_level × target_lux / calibrated_lux
+level_step     = (desired_level − current_level) / 2, at most ±30 % of current_level
+next_level     = current_level + level_step, kept between the floor and the ceiling
+```
+
+If that changes the level by **5 % or less**, it returns the current level and
+nothing is sent.
+
+| Constant | Value |
+|---|---|
+| `CALIBRATED_LUX_FACTOR` | 3.5, until it is measured |
+| `DEFAULT_DH_RAMP_DURATION_SEC` | 20 s |
+| `DH_MAX_STEP_PERCENT` | 30 % |
+| `DH_MIN_STEP_PERCENT` | 5 % |
+| Floor | The min level, but at least 25 (10 %) |
+| Ceiling | The master's max trim. In 50 % mode, see below |
+
+**Behavior:**
+
+- No gain is needed. The more of the lux that is daylight, the smaller the
+  correction, and it does not overshoot.
+- A target the lights can't reach leaves the level at the ceiling or floor, and
+  nothing more is sent.
+- 80 % down to 10 % takes at least 6 adjustments, about 2.5 minutes.
+- The 5 % rule leaves about 273–333 lux at a 300 target, 455–556 at 500, and 727–889
+  at 800, whatever the daylight share.
+- With only 2 readings per average, noise reaches the algorithm more easily. Averaging
+  4 readings is an option to revisit after testing.
+
+**Master in 50 % mode:** the rest of the group may not be in 50 % mode, so the
+master's own halved max is not the group's. It uses the stashed full max as the
+ceiling. While it is held at its own limit, it continues from the level it last
+sent, not from its own level.
+
+---
+
+## 5. When DH is allowed
+
+`get_dhs_inhibit_bits()` returns the reasons DH is stopped. The master needs all
+of them clear. A light following the master ignores bits 5 and 10, because it
+needs neither a target nor to be the master.
 
 | Bit | Inhibited when |
 |---|---|
 | 0 | Not on an Adaptiv network |
-| 1 | Not calibrated (`B_DHS_CALIBRATED` clear) |
+| 1 | **DH disabled** (section 6) |
 | 2 | Light is off (On/Off attribute = 0) |
 | 3 | Not in a group |
-| 4 | DH suspended (`suspend_light_sensor_control()`, section 8) |
-| 5 | Lux reference = 0 |
+| 4 | DH suspended (`suspend_light_sensor_control()`, section 9) |
+| 5 | Target lux = 0 |
 | 6 | Light level below 10 % (`MIN_ALLOWABLE_LIGHT_LEVEL`, 25) |
 | 7 | Occupancy at MID or lower |
-| 8 | Dimming suspension active (`suspend_light_sensor_control_dimming()`) |
-| 9 | DH disabled (`B_DISABLE_LIGHT_SENSOR`) |
+| 8 | Unused |
+| 9 | DH disabled while the firmware version is displayed (`B_DISABLE_LIGHT_SENSOR`) |
 | 10 | Not the master |
 
-These only stop the **master** from sending. A light that receives a DH
-message does **not** check them (section 7).
+---
 
-After power up the light stays in `sensor_idle_state` for one 20 s period,
-then moves to `sensor_active_state` the first time DH is allowed.
+## 6. Disabled and enabled
+
+`dh_disabled` is held in RAM on each light, and every light tracks it for itself.
+
+**Disabled by:**
+
+| Event | Where |
+|---|---|
+| A received level command (Move to Level, Move, Step, Stop, with or without On/Off) | `level-control.c`, command parser |
+| A received on/off command | `on-off.c`, command parser |
+| A received scene recall | `scenes.c`, command parser |
+| The D hold on that light | `on_hold_dim()` |
+
+Trim, occupancy delay, sensitivity, 50 % mode and other settings do not disable it.
+DH's own level changes and occupancy messages don't either.
+
+**Enabled by:**
+
+| Event | Where |
+|---|---|
+| The light was off and occupancy turns it on, from its own sensor or another light's wake | `woke_from_off` in `occ_group.c` |
+| Selecting the master on that light | `dh_set_master()` |
+| A target lux write | `save_light_lux_reference()` |
+| A restart | `light_sensor_init()` |
+
+- **"Off" includes vacancy that ends at mid:** in EM mode or with a min level above
+  0, the occupancy state is OFF while the light stays at mid, so occupancy after that
+  enables DH.
+- **Switched off, then occupancy:** this enables DH, because the occupancy state is
+  OFF.
+- **Mid to on:** occupancy before the end of the vacancy sequence doesn't enable DH.
+- **A switch turning the light on** doesn't enable DH.
+- **Occupancy sensor off (delay 0):** vacancy never happens, so only the other three
+  events enable DH.
+- **If the master misses a command:** it keeps sending, and lights that also missed
+  it follow.
 
 ---
 
-## 5. The master's control loop
+## 7. Messages
 
-`sensor_active_state()`, every 20 s, on the master only:
+All are manufacturer-specific, manufacturer **0x1574**, cluster-specific, client to
+server, default response disabled (frame control 0x15). All values are little-endian.
 
-1. Stop if DH is not allowed (section 4).
-2. Stop if the last change is still ramping: less than `dim_time_dsec`
-   (18.5 s) since the last update.
-3. `error = reference − lux`. Stop if `|error|` is less than **5 % of the
-   reference** (15 lux at 300, 25 at 500, 40 at 800).
-4. Limit the error to **±100 lux** (`MAX_LUX_ERROR`).
-5. `new level = present level + gain × error`.
-6. Keep the new level between the light's **min** and **max** trim levels.
-   (In 50 % mode the stashed full max is used.)
-7. Stop if the level would change by less than **5 % of full scale**
-   (12 levels).
-8. Otherwise: ramp time = 18.5 s, record the time, and **multicast the new
-   level** (section 6).
-
-| Constant | Value | Where |
-|---|---|---|
-| Logic period | 20 s | `LIGHT_SENSOR_UPDATE_AVERAGE_MS` |
-| Ramp time | 18.5 s (185 ds) | `(LIGHT_SENSOR_UPDATE_AVERAGE_MS − 1500) / 100` |
-| Lux deadband | 5 % of reference | `sensor_active_state()` |
-| Lux error limit | ±100 lux | `MAX_LUX_ERROR`, `light_sensor.h` |
-| Minimum level change | 12 levels (5 % of 254) | `sensor_active_state()` |
-| Gain | `TOKEN_APP_DHS_GAIN`, default 1 | set by calibration |
-
-**Gain as calibrated today** (`am_i_master()`):
-`gain = (lux at max − lux at min) / (254 − 25)`, in integer arithmetic, with a
-minimum of 1. That is **lux per level step**. Section 10 explains why using it
-as a multiplier in step 5 is a problem.
-
----
-
-## 6. The DH message
-
-The master sends one Adaptiv manufacturer-specific command:
-
-- **Cluster** 0x0400 (Illuminance Measurement), **command** 0xDD
-  (`ZCL_WRITE_LIGHT_SENSOR_COMMAND_ID`), manufacturer 0x1574, cluster-specific,
-  client to server, default response disabled.
-- Sent by `tx_light_sensor_data()` → `tx_multicast()`, to every multicast
-  binding of the light's endpoint (normally one group), **radius 3**
-  (`GROUP_MULTICAST_RADIUS`).
-- Sent once. There is no retry: if the stack refuses it, it is lost (but see
-  section 7 for why the master then tries again 20 s later).
+**DH Level Adjust:** cluster **0x0400**, command **0xE0**
+(`ZCL_DH_LEVEL_ADJUST_COMMAND_ID`), `tx_dh_level_adjust()`, multicast to every
+binding of the light's endpoint, **radius 3**.
 
 | Byte | Content |
 |---|---|
-| 0–1 | Sender ID: the first two bytes of its EUI64 |
-| 2–3 | Sender's lux (16-bit, little-endian) |
-| 4 | Sender's current level |
-| 5 | **New level for the group** |
-| 6 | **Ramp time**, deciseconds (185 = 18.5 s) |
-| 7 | Low 4 bits: DH mode flags (bit 0 = sender is master). High 4 bits: calibration sample counter |
+| 0 | Master's current level. Receivers don't use it |
+| 1 | **Target level**, 1–255 |
+| 2 | **Duration**, seconds (`DEFAULT_DH_RAMP_DURATION_SEC`) |
 
-Only bytes 5–7 matter after calibration; bytes 0–4 feed the neighbor table
-used by calibration.
+**Master claim:** cluster **0x0400**, command **0xDF**
+(`ZCL_DH_MASTER_CLAIM_COMMAND_ID`), `tx_dh_master_claim()`, no payload, same
+addressing.
 
----
-
-## 7. Lights that receive the message
-
-`update_light_sensor_neighbor_table()`, for every DH message received,
-including the master's own (the stack delivers a light's own multicast back to
-it):
-
-1. Store the sender's lux, level and mode in the neighbor table (10 entries,
-   only used by calibration).
-2. If the sender is the master (mode bit 0) **and** this light is calibrated:
-   `move_to_level_dhs(new level, 18.5 s)`.
-
-`move_to_level_dhs()` (in `level-control.c`):
-
-- Does nothing while a switch dimming command is active (`dimming_button_active`).
-- Limits the level to this light's max trim level.
-- Runs **Move to Level (with On/Off)**: it turns the light on if it is off.
-
-The receiving light does **not** check its own DH inhibits (section 4): its
-on/off state, occupancy state, suspensions or the DH disable flag.
-
-**The master moves its own light only through this path.** `sensor_active_state()`
-never changes the master's level directly; it relies on receiving its own
-multicast. If the multicast is refused by the stack, the master does not move
-either, and the next 20 s cycle simply computes the same correction again.
+Commands 0xDC, 0xDD and 0xDE from earlier firmware are ignored, and older firmware
+ignores 0xE0. Lights on different DH firmware do not follow each other, so upgrade a
+group together.
 
 ---
 
-## 8. Interaction with other features
+## 8. The ramp timer and receiving a level
+
+**The master** starts the ramp timer when the stack accepts the multicast, and
+discards readings until it ends. The first two readings after that are the next
+average, so a command goes out about every 22.5–25 s at most.
+
+**The master moves its own light only by receiving its own multicast**, like the
+occupancy keepalive. If the multicast does not come back, the master has not moved.
+When the timer ends, it works out the level again and sends it, which also covers
+lights that missed the first one.
+
+**During global auto commissioning** (section 9) the master sends no level. It works
+the level out again at each average, so DH resumes as soon as that ends.
+
+**A refused send** starts no timer and isn't retried. The next average, 5 s later,
+acts as the retry. Heavy broadcast traffic doesn't hold a level.
+
+**No repeat or refresh:** a light that joins late or restarts keeps its level until
+the next adjustment, which could be a long time in steady daylight.
+
+**Receiving:** `dh_rx_level_adjust()` runs for every DH Level Adjust received,
+including the master's own.
+
+1. A master that hears a level from a lower node ID stops being the master.
+2. A light with any inhibit set (section 5) ignores the level. So a light that is off,
+   at MID, suspended or has DH disabled stays as it is.
+3. Otherwise it calls `move_to_level_dhs(target, duration × 10)`, which limits the
+   level to this light's max and does nothing while a switch dimming command is active.
+
+---
+
+## 9. Interaction with other features
 
 | Event | Effect on DH |
 |---|---|
-| Power up | DH suspended (see section 10, item 6), and on Adaptiv for 5 s by occupancy init. The first DH decision comes after one 20 s idle period. |
-| Network level command (Move to Level, Move, Step, Stop, with or without On/Off) | `suspend_light_sensor_control()` is called with the unoccupied delay, then again with 5 s. The second call replaces the first, so **DH is suspended for 5 s**. |
-| Switch dimming (Move or Step, with or without On/Off) | Additionally sets the *dimming* suspension for the **unoccupied delay** (inhibit bit 8). DH stops until then. |
+| Power up | DH suspended for 20 s. |
+| Upgrade from the firmware with calibration | At boot, the master setting and calibration flags are cleared once (bits 8–11). A calibration cut short by a power loss no longer leaves occupancy disabled. Select masters again. |
 | Any light change by the firmware (`move_to_level_onoff()`: occupancy wake, dim to mid, off, flashing) | `suspend_all_sensors(ramp + 1 s)`: DH suspended for the ramp plus 1 s. |
-| Occupancy at MID or OFF | Master stops (inhibit bit 7). A DH message from a master that is still ON will still move a light at MID or OFF (section 7). |
-| Light below 10 % | Master stops (inhibit bit 6). |
-| 50 % mode | The master limits the group level with the full (stashed) max; each receiver then limits it with its own max. |
+| Occupancy wake | The light wakes at the wake level, not the last DH level. In a bright room DH then brings it down. |
+| Occupancy at MID or OFF | Master stops, and a light at MID or OFF ignores DH levels. |
+| Red LED on | The reading is not used, because the LED reaches the sensor. |
+| Global auto commissioning announce (global = true) | No DH Level Adjust multicasts until its timeout ends. Master selection still works. |
+| Flashes (master selected, config write, firmware version match) | The light returns to its prior level, or off if it was off. Ending auto commissioning still goes to max. |
+| Max level (trim) raised, by the buttons or a config write | The light goes to the new max level, which is also the level occupancy wakes to. DH then adjusts it. A lower max only limits the level. |
+
+`suspend_light_sensor_control()` takes **milliseconds** (`uint32_t`). A shorter suspend
+does not cut a longer one short. `suspend_all_sensors()` still takes deciseconds,
+because its callers pass ZCL transition times.
 
 ---
 
-## 9. Network traffic
+## 10. Diagnostic unicast
 
-| Situation | DH multicasts per group |
+`dh_debug_send()` (`Light/nwk_mgmt/dh_debug.c`) sends one unicast to the debug target,
+normally a Twitch that prints it on its uart. Any light with a debug target sends it.
+`dhs_debug_tick()` (`light_sensor.c`) checks every 20 s:
+
+- **Level changed since the last packet:** sent, so a ramp gives a packet every 20 s.
+- **No change:** sent every 120 s.
+- **Not sent** (no target, or refused): tried again at the next check, so a new target
+  gets its first packet within 20 s.
+
+A DH Level Adjust doesn't send a packet by itself, so a change shows up within 20 s.
+
+**Frame:** cluster 0xFCDB, command 0xDB, manufacturer 0x1574, endpoint 1 to endpoint
+1, APS retry and route discovery on.
+
+**Target:** 0xFFFE by default, which sends nothing. Addresses below 0xFFFC are sent
+to. It is not saved, so it returns to 0xFFFE after a restart.
+
+| Byte | Size | Content |
+|---|---|---|
+| 0 | u32 | Lower 4 bytes of this light's EUI64 |
+| 4 | u32 | Uptime, seconds (restarts after about 49.7 days) |
+| 8 | u16 | Current lux, the average of the last 2 readings |
+| 10 | u16 | Target lux |
+| 12 | u8 | Current level |
+| 13 | u8 | Mode flags: bit 0 = master, bit 1 = DH disabled |
+| 14 | u8 | Last level this light sent to the group as master, 0 = none since a restart |
+
+**Setting the target:** send the same cluster and command to the light, as a unicast or
+multicast, with the 3-byte payload `0xAA`, then the address, little-endian. Address
+0xFFFE stops the messages. A light that receives a 15-byte data message prints it.
+
+---
+
+## 11. Network traffic
+
+| Situation | Multicasts per group |
 |---|---|
-| Steady daylight, lux within the deadband | none |
-| Daylight changing (sunrise, sunset, clouds) | at most **one per 20 s** (3 per minute) |
+| Level would change by 5 % or less | none |
+| Daylight changing | at most one per ramp, about every 22.5–25 s |
+| Target out of reach, level at the floor or ceiling | none |
+| DH disabled | none |
 | Other lights | none (they only receive) |
-| Calibration | many (appendix A; being replaced) |
 
-Each multicast is repeated by every router within 3 hops. If a group sends a
-DH message every 20 s for a long time, the cause is likely the control loop
-(section 10, items 1 and 2), not normal daylight change.
+| Situation | Unicasts |
+|---|---|
+| Debug target set, level changing | one per 20 s |
+| Debug target set, level steady | one per 120 s |
 
----
-
-## 10. Issues found
-
-1. **The gain is used inverted.** Calibration computes the gain as lux per
-   level step, but the loop multiplies the lux error by it to get level
-   steps. The effective loop gain is therefore gain², not 1. With gain = 1
-   (the default, or any calibration that measured less than 2 lux per step)
-   it happens to work. With gain = 2 or more, each correction is about four
-   times too large: the level swings between limits and the **master sends a
-   DH multicast every 20 s** for as long as daylight is in range. It should
-   divide by the gain (or the gain should be stored as steps per lux).
-2. **The average includes the ramp.** After a change the light ramps for
-   18.5 s, and the next 20 s average is mostly taken during that ramp, so it
-   sees only about half of the change and corrects again. This adds extra
-   steps, and extra multicasts, to every change, even with the right gain.
-   The check "let ramp finish" compares times, not which samples are in the
-   average.
-3. **Without calibration there is no gain.** The gain is computed only by
-   calibration. With master selection replacing calibration, the gain must
-   come from somewhere else (a fixed value, or measured when the master is
-   chosen).
-4. **Receiving lights ignore their own state.** `move_to_level_dhs()` uses
-   Move to Level *with On/Off* and does not check the receiver's DH inhibits.
-   A light that was switched off on its own, or is at MID because it missed
-   an occupancy message, is turned back on by the master's next DH message.
-5. **The master depends on hearing itself, and nothing is retried.** If the
-   multicast is refused, the master corrects itself 20 s later. If it is
-   sent but some lights miss it, those lights stay at the old level until
-   daylight changes enough for another message, which may be a long time.
-6. **Power-up suspension uses the wrong units.** `light_sensor_init()` calls
-   `suspend_light_sensor_control(LIGHT_SENSOR_UPDATE_AVERAGE_MS)`, passing
-   20000 (milliseconds) where deciseconds are expected: 2000 s, about
-   33 minutes. On Adaptiv the occupancy init's 5 s suspension replaces it if
-   it runs later; the order of the two decides which one wins.
-7. **A level command's long suspension is overwritten.** The level-control
-   code suspends DH for the unoccupied delay and then immediately for 5 s.
-   Only the 5 s remains. If the long suspension was intended after a network
-   level command, it is not in effect (switch dimming still gets it through
-   the separate dimming suspension).
-8. **Unused code.** `tx_light_sensor_suspend_time()` (command 0xDC) is never
-   called; its receive handler remains. The neighbor table and bytes 0–4 of
-   the DH message are only used by calibration.
-
----
-
-## 11. Ways to reduce broadcasting
-
-In order of expected effect:
-
-1. **Fix the control loop** (issues 1 and 2): divide by the lux-per-step gain
-   (or use a fixed, known gain), and wait for an average that starts after
-   the ramp ends (skip one 20 s period after each change, or restart the
-   average when the ramp finishes). A correct loop needs about one message
-   per real daylight change instead of several, or one every 20 s.
-2. **Limit the rate:** a minimum time between DH updates (for example 60 s)
-   and/or a wider lux deadband (for example 10 %). Daylight changes slowly, so
-   a 20 s response is not needed, and the worst case becomes one message per
-   minute even if the loop misbehaves.
-3. **Master applies its own level directly** and ignores its own multicast.
-   This does not reduce traffic, but removes the dependency on hearing itself
-   and allows a retry.
-4. **Retry a refused send** the same way as the group occupancy messages
-   (about once a second, up to 5 attempts, held while broadcast traffic is
-   heavy).
-5. **Remove calibration-only parts** once master selection replaces it: the
-   neighbor table, bytes 0–4 and the counter of the DH message, the
-   calibration states, `send_dhs_table_info()`, and the unused suspend
-   command. The message only needs the new level and the ramp time.
-6. **Receivers check their own state** (issue 4): ignore a DH message unless
-   this light is on, at the ON occupancy level, and not suspended. This
-   fixes a behavior problem rather than traffic.
-
----
-
-## Appendix A: Calibration today (being replaced)
-
-Writing a non-zero lux reference starts calibration on every light in the
-group:
-
-1. All lights go to 100 % and sample lux every 500 ms; each light multicasts
-   its readings at random times every few seconds (`send_dhs_table_info()`).
-2. All lights go to 10 % and do the same.
-3. Each light builds the same neighbor table of every light's high and low
-   lux, and picks as master the light whose readings are closest to the group
-   averages (`am_i_master()`). That light stores the gain and sets
-   `B_DHS_MASTER_LIGHT`; every light sets `B_DHS_CALIBRATED`.
-4. The master flashes twice to show it was chosen.
-
-The many multicasts in this process are the "lots of broadcasting" that
-master selection removes.
+Each multicast is repeated by every router within 3 hops.

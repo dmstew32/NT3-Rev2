@@ -214,6 +214,9 @@ bool is_app_flags_nonvol_set(uint32_t mask) { return (s.flags & mask) != 0; }
 void set_app_flags_nonvol(uint32_t mask, uint8_t v) { if(v) { s.flags |= mask; } else { s.flags &= ~mask; } trace("set_app_flags(0x%x, %u)", mask, v); }
 void sl_token_get_data(uint32_t t, uint32_t idx, void *d, uint32_t len) { (void)idx; assert(len == 1); *(uint8_t *)d = s.tokens[t]; }
 void sl_token_set_data(uint32_t t, uint32_t idx, void *d, uint32_t len) { (void)idx; assert(len == 1); s.tokens[t] = *(uint8_t *)d; trace("token_set(%u, %u)", t, s.tokens[t]); }
+void dh_set_master(bool enable) { if(enable) { s.flags |= B_DHS_MASTER_LIGHT; } else { s.flags &= ~B_DHS_MASTER_LIGHT; } trace("dh_set_master(%u)", enable); }
+void dh_disable(void) { }
+void dim_lights_up_down(uint16_t cycles, uint16_t ramp) { trace("dim_lights_up_down(%u, %u)", cycles, ramp); }
 void move_to_level_onoff(uint8_t level, uint16_t tt) { s.level = level; trace("move_to_level_onoff(%u, %u)", level, tt); }
 uint8_t get_present_light_level(void) { return s.level; }
 uint16_t get_light_color(void) { return s.color; }

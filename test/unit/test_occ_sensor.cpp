@@ -53,7 +53,9 @@ FAKE_VALUE_FUNC(bool, device_is_in_a_group);
 FAKE_VALUE_FUNC(uint8_t, get_number_of_multicast_bindings);
 FAKE_VOID_FUNC(get_multicast_info, uint8_t, device_binding_info_t *);
 FAKE_VALUE_FUNC(uint32_t, get_random_number, uint32_t, uint32_t);
-FAKE_VALUE_FUNC(bool, suspend_light_sensor_control, uint16_t);
+FAKE_VALUE_FUNC(bool, suspend_light_sensor_control, uint32_t);
+FAKE_VOID_FUNC(dh_enable);
+FAKE_VALUE_FUNC(bool, global_ac_quiet_active);
 FAKE_VALUE_FUNC(uint8_t, addTask, test_task_fn_t, taskParm_t, taskParm_t);
 FAKE_VALUE_FUNC(uint8_t, removeTask, test_task_fn_t);
 FAKE_VALUE_FUNC(sl_status_t, sl_token_get_data, uint32_t, uint32_t, void *, uint32_t);
@@ -124,7 +126,7 @@ protected:
     {
         RESET_FAKE(get_present_network); RESET_FAKE(move_to_level_onoff); RESET_FAKE(sl_zigbee_af_on_off_cluster_off_cb);
         RESET_FAKE(clear_off_from_switch); RESET_FAKE(clear_on_from_switch); RESET_FAKE(restore_unoccupied_delay);
-        RESET_FAKE(sl_zigbee_send_multicast); RESET_FAKE(hal_start_occ_sensor); RESET_FAKE(hal_stop_occ_sensor);
+        RESET_FAKE(dh_enable); RESET_FAKE(global_ac_quiet_active); RESET_FAKE(sl_zigbee_send_multicast); RESET_FAKE(hal_start_occ_sensor); RESET_FAKE(hal_stop_occ_sensor);
         RESET_FAKE(broadcast_monitor_get_traffic);
         broadcast_monitor_get_traffic_fake.return_val = BROADCASTING_LIGHT;
         FFF_RESET_HISTORY();
@@ -219,6 +221,36 @@ TEST_F(OccSensor, PowerUpStartsOnAndSendsNothing)
     EXPECT_FALSE(is_occ_mid_or_lower());
 }
 
+TEST_F(OccSensor, DaylightHarvestingLevelAdjustBytes)
+{
+    ASSERT_TRUE(tx_dh_level_adjust(100, 120, 20));
+    ASSERT_EQ(1u, m_air.size());
+    EXPECT_EQ(ZCL_ILLUM_MEASUREMENT_CLUSTER_ID, m_air[0].aps.clusterId);
+    EXPECT_EQ(3, m_air[0].radius);
+    ASSERT_EQ(8u, m_air[0].bytes.size());
+    EXPECT_EQ(0xE0, m_air[0].bytes[4]);
+    EXPECT_EQ(100, m_air[0].bytes[5]);
+    EXPECT_EQ(120, m_air[0].bytes[6]);
+    EXPECT_EQ(20, m_air[0].bytes[7]);
+
+    m_refuse = 1;
+    EXPECT_FALSE(tx_dh_level_adjust(100, 120, 20));
+    get_present_network_fake.return_val = eDAINTREE_NWK;
+    EXPECT_FALSE(tx_dh_level_adjust(100, 120, 20));
+}
+
+TEST_F(OccSensor, DaylightHarvestingMasterClaimBytes)
+{
+    ASSERT_TRUE(tx_dh_master_claim());
+    ASSERT_EQ(1u, m_air.size());
+    EXPECT_EQ(ZCL_ILLUM_MEASUREMENT_CLUSTER_ID, m_air[0].aps.clusterId);
+    ASSERT_EQ(5u, m_air[0].bytes.size());
+    EXPECT_EQ(0xDF, m_air[0].bytes[4]);
+
+    m_refuse = 1;
+    EXPECT_FALSE(tx_dh_master_claim());
+}
+
 TEST_F(OccSensor, KeepaliveBytes)
 {
     rx_off();
@@ -245,6 +277,39 @@ TEST_F(OccSensor, KeepaliveBytes)
     EXPECT_EQ(OCC_GROUP_ON, a.bytes[7]);
     EXPECT_EQ(OCC_KEEPALIVE_WAKE, a.bytes[8]);
     EXPECT_EQ(204, a.bytes[9]);                        // wake level
+}
+
+TEST_F(OccSensor, DuringGlobalAutoCommissioningVacancySendsNothingButTheLightStillDimsAndTurnsOff)
+{
+    global_ac_quiet_active_fake.return_val = true;
+    samples(600 * 1000 + 150);
+    EXPECT_TRUE(m_air.empty());
+    ASSERT_EQ(1u, m_moves.size());
+    EXPECT_EQ(51, m_moves[0].level);
+    samples(300 * 1000 + 150);
+    EXPECT_TRUE(m_air.empty());
+    EXPECT_EQ(1u, m_offs.size());
+}
+
+TEST_F(OccSensor, DuringGlobalAutoCommissioningOccupancyTurnsOnOnlyThisLight)
+{
+    global_ac_quiet_active_fake.return_val = true;
+    samples(900 * 1000 + 300);                         // Off on its own
+    ASSERT_EQ(1u, m_offs.size());
+    m_moves.clear();
+    samples(5000, always);
+    EXPECT_TRUE(m_air.empty());
+    ASSERT_FALSE(m_moves.empty());
+    EXPECT_EQ(204, m_moves.back().level);             // On, with no wake sent
+}
+
+TEST_F(OccSensor, AfterGlobalAutoCommissioningMulticastsGoOutAgain)
+{
+    global_ac_quiet_active_fake.return_val = true;
+    samples(60 * 1000);
+    global_ac_quiet_active_fake.return_val = false;
+    samples(540 * 1000 + 150);
+    EXPECT_FALSE(m_air.empty());                       // The refresh and level change
 }
 
 TEST_F(OccSensor, VacancyDimsToMidThenTurnsOffWithLevelChangeBytes)
@@ -387,7 +452,7 @@ TEST_F(OccSensor, IgnoresItsOwnMulticast)
 
 TEST_F(OccSensor, IgnoresMessagesWhenOccupancyControlIsOff)
 {
-    m_flags = B_DISABLE_OCC_SENSOR;                    // DHS calibration, version display
+    m_flags = B_DISABLE_OCC_SENSOR;                    // version display
     rx_off();
     m_flags = 0;
     m_delay_s = 0;                                     // occupancy sensor off

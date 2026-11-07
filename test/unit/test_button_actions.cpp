@@ -22,6 +22,10 @@ FAKE_VALUE_FUNC(bool, device_is_in_a_group);
 FAKE_VOID_FUNC(force_factory_reset, uint32_t, reset_reason_t);
 FAKE_VOID_FUNC(toggle_50_percent_mode);
 FAKE_VOID_FUNC(toggle_em_mode);
+FAKE_VALUE_FUNC(bool, is_app_flags_nonvol_set, uint32_t);
+FAKE_VOID_FUNC(dh_set_master, bool);
+FAKE_VOID_FUNC(dh_disable);
+FAKE_VOID_FUNC(dim_lights_up_down, uint16_t, uint16_t);
 FAKE_VOID_FUNC(start_local_auto_commission);
 FAKE_VOID_FUNC(start_display_fw_version);
 FAKE_VOID_FUNC(set_occupancy_threshold, uint16_t);
@@ -50,6 +54,7 @@ FAKE_VOID_FUNC_VARARG(sl_zigbee_core_debug_println, const char *, ...);
   F(app_button_on_startup) F(app_button_register_sequence_cb) F(app_button_register_hold) \
   F(app_leds_show_presses) F(app_leds_show_fail) F(app_leds_show_dim_step) F(get_present_network) \
   F(device_is_in_a_group) F(force_factory_reset) F(toggle_50_percent_mode) F(toggle_em_mode) \
+  F(is_app_flags_nonvol_set) F(dh_set_master) F(dh_disable) F(dim_lights_up_down) \
   F(start_local_auto_commission) F(start_display_fw_version) F(set_occupancy_threshold) \
   F(save_adaptiv_unoccupied_delay) F(save_adaptiv_unoccupied_delay_to_off) F(tx_occ_sensor_new_delays) \
   F(get_unoccupied_delay) F(get_unoccupied_delay_to_off) F(save_max_light_level) F(save_mid_light_level) \
@@ -162,6 +167,68 @@ TEST_F(ButtonActions, SixAndSixStartsLocalAutoCommissionOnlyOnAdaptivWithoutAGro
     presses(6, 6);
     EXPECT_EQ(0u, start_local_auto_commission_fake.call_count);
     EXPECT_TRUE(only_fail_shown());
+}
+
+TEST_F(ButtonActions, TheDHoldDisablesDaylightHarvesting)
+{
+    get_present_light_level_fake.return_val = 100;
+    hold(APP_BUTTON_D);
+    EXPECT_EQ(1u, dh_disable_fake.call_count);
+}
+
+TEST_F(ButtonActions, SettingsDoNotDisableDaylightHarvesting)
+{
+    network(eADAPTIV_NWK, true);
+    presses(1, 0);       // Trim
+    presses(0, 3);       // Delays
+    presses(0, 11);      // Sensitivity
+    presses(2, 2);       // 50 % mode
+    EXPECT_EQ(0u, dh_disable_fake.call_count);
+}
+
+TEST_F(ButtonActions, TwelvePressesSetsTheHigherSensitivity)
+{
+    network(eADAPTIV_NWK, true);
+    presses(0, 12);
+    EXPECT_EQ(40, set_occupancy_threshold_fake.arg0_val);
+    presses(0, 11);
+    EXPECT_EQ(80, set_occupancy_threshold_fake.arg0_val);
+}
+
+TEST_F(ButtonActions, ThreeAndThreeMakesThisLightTheMasterRedAndLightFlashThreeTimes)
+{
+    network(eADAPTIV_NWK, true);
+    is_app_flags_nonvol_set_fake.return_val = false;
+    presses(3, 3);
+    ASSERT_EQ(1u, dh_set_master_fake.call_count);
+    EXPECT_TRUE(dh_set_master_fake.arg0_val);
+    EXPECT_EQ(3, app_leds_show_presses_fake.arg0_val);
+    ASSERT_EQ(1u, dim_lights_up_down_fake.call_count);
+    EXPECT_EQ(3, dim_lights_up_down_fake.arg0_val);
+}
+
+TEST_F(ButtonActions, ThreeAndThreeAgainStopsBeingTheMasterOnlyRedFlashes)
+{
+    network(eADAPTIV_NWK, true);
+    is_app_flags_nonvol_set_fake.return_val = true;
+    presses(3, 3);
+    ASSERT_EQ(1u, dh_set_master_fake.call_count);
+    EXPECT_FALSE(dh_set_master_fake.arg0_val);
+    EXPECT_EQ(3, app_leds_show_presses_fake.arg0_val);
+    EXPECT_EQ(0u, dim_lights_up_down_fake.call_count);
+}
+
+TEST_F(ButtonActions, ThreeAndThreeFailsUnlessInAnAdaptivGroup)
+{
+    network(eADAPTIV_NWK, false);
+    presses(3, 3);
+    network(eNO_NWK, false);
+    presses(3, 3);
+    network(eDAINTREE_NWK, true);
+    presses(3, 3);
+    EXPECT_EQ(3u, app_leds_show_fail_fake.call_count);
+    EXPECT_EQ(0u, dh_set_master_fake.call_count);
+    EXPECT_EQ(0u, app_leds_show_presses_fake.call_count);
 }
 
 TEST_F(ButtonActions, EightAndEightShowsTheFirmwareVersion)

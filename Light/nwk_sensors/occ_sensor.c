@@ -18,6 +18,7 @@
 #include "light_on_off.h"
 #include "light_sensor.h"
 #include "broadcast_monitor.h"
+#include "auto_comm.h"
 
 #include "sl_zigbee_debug_print.h"
 
@@ -150,7 +151,7 @@ void occ_sensor_init(void)
   }
   else if(eADAPTIV_NWK == get_present_network())
   {
-     suspend_light_sensor_control(DSECS_5_SECS);
+     suspend_light_sensor_control(5000UL);
      occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
      occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
      occ_time_stamp = get_time_ms();
@@ -319,6 +320,12 @@ static bool grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t sta
                                occ_keepalive_reason_t reason, uint8_t level)
 {
   (void)ctx;
+  if(global_ac_quiet_active())
+  {
+     // Not sent, but carried on as if it were: this light runs on its own.  A wake
+     // turns only this light on (occ_group: own wake not back in time).
+     return(true);
+  }
   bool sent = tx_occ_keepalive(time_s, (uint8_t)state, (uint8_t)reason, level);
   #if (OCC_PRINT >= 1)
   sl_zigbee_app_debug_println("OCC TX keepalive %s %d s lvl:%d%s   <%d>",
@@ -331,6 +338,10 @@ static bool grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t sta
 static bool grp_send_level_change(void *ctx, occ_group_state_t state, uint8_t level)
 {
   (void)ctx;
+  if(global_ac_quiet_active())
+  {
+     return(true);     // Not sent: this light changes on its own timer
+  }
   bool sent = tx_occ_level_change((uint8_t)state, level);
   #if (OCC_PRINT >= 1)
   sl_zigbee_app_debug_println("OCC TX level change %d lvl:%d%s   <%d>", state, level,
@@ -351,6 +362,12 @@ static bool grp_broadcast_traffic_heavy(void *ctx)
   return(BROADCASTING_HEAVY == broadcast_monitor_get_traffic());
 }
 
+static void grp_woke_from_off(void *ctx)
+{
+  (void)ctx;
+  dh_enable();
+}
+
 static const occ_group_ops_t occ_group_ops =
 {
   .ctx = NULL,
@@ -363,6 +380,7 @@ static const occ_group_ops_t occ_group_ops =
   .send_level_change = grp_send_level_change,
   .random_ms = grp_random_ms,
   .broadcast_traffic_heavy = grp_broadcast_traffic_heavy,
+  .woke_from_off = grp_woke_from_off,
 };
 
 // Every light starts ON with a full timer and sends nothing
@@ -658,7 +676,7 @@ void suspend_all_sensors(uint16_t Dsecs)
 {
   suspend_occ_sensor_control(Dsecs);
 
-  suspend_light_sensor_control(Dsecs);
+  suspend_light_sensor_control(100UL * (uint32_t)Dsecs);
 }
 
 
@@ -699,7 +717,7 @@ void occ_sensor_logic(bool occupied)
      return;
   }
 
-  // DHS calibration
+  // Firmware version display
   if(is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
   {
      return;

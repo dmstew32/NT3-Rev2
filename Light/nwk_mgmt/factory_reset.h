@@ -9,6 +9,8 @@ typedef enum
 
 void force_factory_reset(uint32_t delay_ms, reset_reason_t reason);
 void nwk_down_clean_up(void);
+// From force_factory_reset() until the chip restarts at the end of the reset
+bool factory_reset_in_progress(void);
 
 void hal_watchdog_init(bool force_reset);
 void pet_the_dog(void);

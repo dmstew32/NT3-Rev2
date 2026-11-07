@@ -42,6 +42,7 @@ struct Light
     std::function<uint32_t(uint32_t)> random;          // max -> value
     std::function<void(const Msg &)> sent;              // network
     std::vector<std::pair<uint32_t, occ_group_state_t>> moves;   // go_to_state calls
+    int woke_from_off = 0;
     uint32_t *clock = nullptr;
     std::function<bool()> stack_accepts = [] { return true; };   // false: the stack refuses the send
     std::function<bool()> traffic_heavy = [] { return false; };  // broadcast traffic
@@ -74,6 +75,7 @@ static bool l_level_change(void *c, occ_group_state_t s, uint8_t lvl)
 }
 static uint32_t l_random(void *c, uint32_t max) { return static_cast<Light *>(c)->random(max); }
 static bool l_heavy(void *c) { return static_cast<Light *>(c)->traffic_heavy(); }
+static void l_woke(void *c) { static_cast<Light *>(c)->woke_from_off++; }
 
 // Our own multicast, back from the stack
 static void deliver_looped(Light &l, uint32_t now)
@@ -90,7 +92,7 @@ static void setup_light(Light &l, int id, uint32_t *clock)
 {
     l.id = id;
     l.clock = clock;
-    l.ops = { &l, l_dim, l_off, l_go, l_level_for, l_current, l_keepalive, l_level_change, l_random, l_heavy };
+    l.ops = { &l, l_dim, l_off, l_go, l_level_for, l_current, l_keepalive, l_level_change, l_random, l_heavy, l_woke };
     occ_group_init(&l.g, &l.ops, *clock);
 }
 
@@ -303,6 +305,41 @@ TEST_F(OccGroup, OwnRefreshOrLevelChangeComingBackChangesNothing)
     occ_group_rx_own_keepalive(&l.g, now, 20, OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH);
     EXPECT_EQ(OCC_GROUP_OFF, occ_group_state(&l.g));   // only our wake turns us on
     EXPECT_TRUE(l.moves.empty());
+}
+
+TEST_F(OccGroup, WakingFromOffIsReportedForAWakeFromAnotherLight)
+{
+    occ_group_external_off(&l.g);
+    occ_group_rx_keepalive(&l.g, now, 600, OCC_GROUP_ON, OCC_KEEPALIVE_WAKE);
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_EQ(1, l.woke_from_off);
+}
+
+TEST_F(OccGroup, WakingFromOffIsReportedForThisLightsOwnWake)
+{
+    occ_group_external_off(&l.g);
+    occ_group_on_occupancy(&l.g, now);
+    run_for(100);
+    occ_group_rx_own_keepalive(&l.g, now, 600, OCC_GROUP_ON, OCC_KEEPALIVE_WAKE);
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_EQ(1, l.woke_from_off);
+}
+
+TEST_F(OccGroup, WakingFromMidIsNotReported)
+{
+    run_for(30 * MIN_MS + 5100);
+    ASSERT_EQ(OCC_GROUP_MID, occ_group_state(&l.g));
+    occ_group_rx_keepalive(&l.g, now, 600, OCC_GROUP_ON, OCC_KEEPALIVE_WAKE);
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_EQ(0, l.woke_from_off);
+}
+
+TEST_F(OccGroup, ASwitchTurningTheLightOnIsNotReported)
+{
+    occ_group_external_off(&l.g);
+    occ_group_external_on(&l.g, now);
+    EXPECT_EQ(OCC_GROUP_ON, occ_group_state(&l.g));
+    EXPECT_EQ(0, l.woke_from_off);
 }
 
 TEST_F(OccGroup, ExpiryWhileWakingWaitsForTheWake)

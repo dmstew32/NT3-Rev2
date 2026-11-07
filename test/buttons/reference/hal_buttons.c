@@ -180,6 +180,26 @@ static void button_done_handler(sl_zigbee_af_event_t *event)
      toggle_em_mode();
      return;    // Only for this light
   }
+  /***********************    DH MASTER    *********************/
+  /* Added after the button refactor; same feature in both, so sessions still compare */
+  else if((3 == button[0].edges) && (3 == button[1].edges))
+  {
+     if((eADAPTIV_NWK == get_present_network()) && device_is_in_a_group())
+     {
+        bool enable = !is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT);
+        dh_set_master(enable);
+        hal_start_flashing_red_led((uint32_t)button[1].edges, 250UL, 250UL);
+        if(enable)
+        {
+           dim_lights_up_down((uint16_t)button[1].edges, DSECS_HALF_SECS);
+        }
+     }
+     else
+     {
+        hal_start_flashing_red_led(1UL, 1500UL, 50UL);
+     }
+     return;    // Only for this light
+  }
   /***********************   DO TWITCH's JOB  *********************/
   else if((N_BUT0_PRESSES_BX_MANUAL_ADD == button[0].edges) && (N_BUT1_PRESSES_BX_MANUAL_ADD == button[1].edges))
   {

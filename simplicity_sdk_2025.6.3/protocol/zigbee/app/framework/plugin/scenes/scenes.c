@@ -23,6 +23,7 @@
 #ifdef ADAPTIV_LIGHT
 #include "light_on_off.h"
 #include "hal_pwm.h"
+#include "light_sensor.h"
 #endif // ADAPTIV_LIGHT
 
 #include "zap-cluster-command-parser.h"
@@ -1548,6 +1549,9 @@ uint32_t sl_zigbee_af_scenes_cluster_server_command_parse(sl_service_opcode_t op
       }
       case ZCL_RECALL_SCENE_COMMAND_ID:
       {
+#ifdef ADAPTIV_LIGHT
+        dh_disable();
+#endif // ADAPTIV_LIGHT
         status = sl_zigbee_af_scenes_cluster_recall_scene_cb(cmd);
         break;
       }

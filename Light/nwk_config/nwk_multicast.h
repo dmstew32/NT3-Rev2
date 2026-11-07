@@ -7,8 +7,8 @@ bool tx_move_to_new_light_level(uint8_t level, uint16_t xtion_time);
 bool tx_occ_sensor_new_delays(uint16_t delay_unoccupied, uint16_t delay_to_off);
 bool tx_color_new_temp(uint16_t new_color);
 bool tx_new_light_levels(void);
-bool tx_light_sensor_suspend_time(uint16_t Dsec_time);
-bool tx_light_sensor_data(uint8_t *data, uint8_t length);
+bool tx_dh_level_adjust(uint8_t current_level, uint8_t target_level, uint8_t duration_sec);
+bool tx_dh_master_claim(void);
 
 // Group occupancy (occ_group.h): state is an occ_group_state_t, reason an occ_keepalive_reason_t
 bool tx_occ_keepalive(uint16_t time_until_expiration_sec, uint8_t state, uint8_t reason, uint8_t level);

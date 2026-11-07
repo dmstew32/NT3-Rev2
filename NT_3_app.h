@@ -26,8 +26,9 @@
 // Adaptive commands
 #define ZCL_ADAPTIV_DEBUG_CLUSTER_ID          (0xFCDB)
 #define ZCL_ADAPTIV_DEBUG_COMMAND_ID          (0xDB)
-#define ZCL_SUSPEND_LIGHT_SENSOR_COMMAND_ID   (0xDC)
-#define ZCL_WRITE_LIGHT_SENSOR_COMMAND_ID     (0xDD)
+/* 0xDC, 0xDD, 0xDE: earlier daylight harvesting commands, ignored now */
+#define ZCL_DH_LEVEL_ADJUST_COMMAND_ID        (0xE0)
+#define ZCL_DH_MASTER_CLAIM_COMMAND_ID        (0xDF)
 #define ZCL_OCCUPANCY_SENSOR_KEEPALIVE_COMMAND_ID     (0xDF)   /* occ_group.h */
 #define ZCL_OCCUPANCY_SENSOR_LEVEL_CHANGE_COMMAND_ID  (0xE0)
 
@@ -47,7 +48,7 @@
 #define DEFAULT_OCC_SENSOR_XXL_DELAY    (2UL*60UL*60UL) /* 2 hours */
 #define DEFAULT_OCC_SENSOR_XXXL_DELAY   (3UL*60UL*60UL) /* 3 hours occ sensor*/
 #define DEFAULT_OCC_SENSOR_THRESHOLD    (80)        /* Trip point */
-#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (60)
+#define DEFAULT_OCC_SENSOR_THRESHOLD_LOW (40)
 
 #define DEFAULT_SENSOR_LUX_TARGET  (0)         /* DHS Off */
 
@@ -77,25 +78,18 @@
 
 /* DHS on boundary */
 #define B_DHS_MASTER_LIGHT      (1UL << 8UL)
-#define B_DHS_CALIBRATING       (1UL << 9UL)
-#define B_DHS_CALIBRATED        (1UL << 10UL)
-#define B_DHS_HIGH_LUX          (1UL << 11UL)
+/* Bits 9-11: set by the firmware with calibration, cleared at boot.  Don't reuse. */
+#define B_DHS_OLD_CALIBRATING   (1UL << 9UL)
+#define B_DHS_OLD_FLAGS         ((1UL << 9UL) | (1UL << 10UL) | (1UL << 11UL))
 
 #define B_OKELLEY_FOLLY_1       (1UL << 12UL)
 
-// Bit test for byte, after S_DHS_MODE_INFO
-#define SH_DHS_MODE_INFO        (8)
-#define BS_DHS_MASTER_LIGHT     (1 << 0)
-#define BS_DHS_CALIBRATING      (1 << 1)
-#define BS_DHS_CALIBRATED       (1 << 2)
-#define BS_DHS_HIGH_LUX         (1 << 3)
 
 //#define TC_LINK_KEY_FIX
 #define NO_LEAVE_ON_TC_LINK_FAILURE
 
 #define MODIFY_JOIN_PROCESS           /* Skip some steps */
 
-#define N_SENSOR_NEIGHBOR_TABLE_SIZE  (16)
 
 #define DISCO_POLL_TIME            (5000UL)
 #define DISCO_POLL_TIME_DAINTREE   (30000UL)
@@ -125,12 +119,7 @@
 //#define DHS_SINK_DEVICE               /* Make one node sink DHS info */
 
 // Op-codes for sink/source
-#define SINK_SOURCE_DISABLE  (0x10)
-#define SINK_SOURCE_ENABLE   (0x11)
-#define SINK_SHORT_ADDR      (0xAA)
-#define DHS_DATA             (0xD1)      /* Daylight harvester data */
-#define DHS_CAL_DATA         (0xDC)
-#define DHS_MST_DATA         (0xDE)
+#define SINK_SHORT_ADDR      (0xAA)      /* Set the debug target, see dh_debug.h */
 
 //#define DISABLE_LIGHT_SENSOR_CONTROL     /* Report lux but no adjustment of lights */
 #define ALLOW_DISPLAY_VERSION

@@ -110,7 +110,6 @@ void app_init(void)
   update_bindingTable_address();
   sl_zigbee_set_radio_power(DEFAULT_RADIO_PWR);
   check_switch_network();
-  init_sink_debug();
   sl_zigbee_app_debug_println("} App init done v%s   <%d>\n", APP_VERSION_STR, get_time_ms());
   app_init_done_flag = true;
 
