@@ -59,6 +59,7 @@ FAKE_VALUE_FUNC(sl_status_t, sl_token_set_data, uint32_t, uint32_t, void *, uint
 FAKE_VALUE_FUNC(sl_zigbee_af_status_t, sl_zigbee_af_read_server_attribute, uint8_t, uint16_t, sl_zigbee_af_attribute_id_t, uint8_t *, uint8_t);
 FAKE_VALUE_FUNC(sl_zigbee_af_status_t, sl_zigbee_af_write_server_attribute, uint8_t, uint16_t, sl_zigbee_af_attribute_id_t, uint8_t *, uint8_t);
 FAKE_VALUE_FUNC(bool, dh_debug_send, uint16_t, uint16_t, uint8_t, uint8_t, uint8_t);
+FAKE_VALUE_FUNC(bool, global_ac_quiet_active);
 FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_println, const char *, ...);
 FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_print, const char *, ...);
 }
@@ -71,7 +72,7 @@ FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_print, const char *, ...);
   F(sl_zigbee_get_node_id) F(move_to_level_dhs) \
   F(broadcast_monitor_get_traffic) F(sl_token_get_data) F(sl_token_set_data) \
   F(sl_zigbee_af_read_server_attribute) F(sl_zigbee_af_write_server_attribute) \
-  F(dh_debug_send) F(sl_zigbee_app_debug_println) F(sl_zigbee_app_debug_print)
+  F(dh_debug_send) F(global_ac_quiet_active) F(sl_zigbee_app_debug_println) F(sl_zigbee_app_debug_print)
 
 static const sl_802154_short_addr_t MY_NODE = 0x5000, LOWER_NODE = 0x1000, HIGHER_NODE = 0x9000;
 static uint32_t m_now;
@@ -415,6 +416,31 @@ TEST_F(LightSensor, BeingDeselectedDoesNotEnableDh)
     dh_set_master(false);
     rx(100, 120, 20);
     EXPECT_EQ(0u, move_to_level_dhs_fake.call_count);
+}
+
+/* --------------------------------------------------------------- global auto commissioning */
+TEST_F(LightSensor, DuringGlobalAutoCommissioningTheMasterSendsNoLevel)
+{
+    m_flags = B_DHS_MASTER_LIGHT;
+    init_running();
+    global_ac_quiet_active_fake.return_val = true;
+    for(int i = 0; i < 20; i++)
+    {
+        reading(100);
+    }
+    EXPECT_EQ(0u, tx_dh_level_adjust_fake.call_count);
+
+    global_ac_quiet_active_fake.return_val = false;
+    pair(100);
+    EXPECT_EQ(1u, tx_dh_level_adjust_fake.call_count);
+}
+
+TEST_F(LightSensor, DuringGlobalAutoCommissioningAMasterCanStillBeSelected)
+{
+    init_running();
+    global_ac_quiet_active_fake.return_val = true;
+    dh_set_master(true);
+    EXPECT_EQ(1u, tx_dh_master_claim_fake.call_count);
 }
 
 /* --------------------------------------------------------------- the target */

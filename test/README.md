@@ -32,7 +32,7 @@ One test program per module, like Z3Switch's `light_switch/test`:
 | test_occ_sensor | Light/nwk_sensors/occ_sensor.c Adaptiv part + occ_group + nwk_multicast (bytes on the air) |
 | test_light_on_off | Light/nwk_on_off/light_on_off.c (how flashes end, new max level) |
 | test_light_levels | Light/utils/light_levels.c (Daintree level mapping, colour split, PWM floor) |
-| test_auto_comm | Light/auto_commission/auto_comm.c (group added: received Add Group vs. Adaptiv commissioning) |
+| test_auto_comm | Light/auto_commission/auto_comm.c (group added: received Add Group vs. Adaptiv commissioning; global auto commissioning quiet time) |
 
 How a test is built (see `CMakeLists.txt`):
 

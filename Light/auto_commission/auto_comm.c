@@ -17,12 +17,16 @@
 #include "sl_zigbee_debug_print.h"
 #include "occ_sensor.h"     // needed by nwk_multicast.h
 #include "nwk_multicast.h"
+#include "auto_comm.h"
 
 extern sl_zigbee_af_status_t manually_add_group(uint16_t new_group);
 
 #define PRINT_AUTO
 
 static uint8_t auto_tx_count = 0;
+
+static bool global_ac_quiet = false;
+static uint32_t global_ac_quiet_end_ms = 0UL;
 //static uint32_t auto_start_time = 0UL;
 
 static adaptiv_commish_info_t get_commish_nv_data(void);
@@ -234,6 +238,38 @@ void check_adaptiv_auto_commission(void)
  * NOTE: Moved to new scheme in v11,
  *       Also option_byte will hold cmd op-code
  */
+// Started by a global announce.  A later announce never shortens it.
+void global_ac_quiet_start(uint16_t timeout_s)
+{
+  uint32_t seconds = (0U == timeout_s) ? GLOBAL_AC_DEFAULT_TIMEOUT_S : timeout_s;
+  uint32_t end_ms = get_time_ms() + (seconds * 1000UL);
+
+  if(!global_ac_quiet_active() || (0 < (int32_t)(end_ms - global_ac_quiet_end_ms)))
+  {
+     global_ac_quiet_end_ms = end_ms;
+  }
+  global_ac_quiet = true;
+  sl_zigbee_app_debug_println("AUTO: global, no occupancy/DH multicasts for %d s   <%d>", seconds, get_time_ms());
+}
+
+void global_ac_quiet_stop(void)
+{
+  if(global_ac_quiet)
+  {
+     sl_zigbee_app_debug_println("AUTO: global ended, multicasts resume   <%d>", get_time_ms());
+  }
+  global_ac_quiet = false;
+}
+
+bool global_ac_quiet_active(void)
+{
+  if(global_ac_quiet && (0 <= (int32_t)(get_time_ms() - global_ac_quiet_end_ms)))
+  {
+     global_ac_quiet_stop();
+  }
+  return(global_ac_quiet);
+}
+
 bool auto_commission_incoming_cmd(sl_zigbee_af_cluster_command_t *cmd)
 {
   adaptiv_commish_info_t adaptiv_commish_info = {0};
@@ -257,6 +293,20 @@ bool auto_commission_incoming_cmd(sl_zigbee_af_cluster_command_t *cmd)
         adaptiv_commish_info.group_id = GET_16_FROM_ARRAY(cmd->buffer, base_idx+5);
         adaptiv_commish_info.auto_time_out = (uint32_t)GET_16_FROM_ARRAY(cmd->buffer, base_idx+7);
         adaptiv_commish_info.src_ep =  cmd->buffer[base_idx+11];
+
+        // Global auto commissioning (byte 1): keep the air quiet for it.  Every light,
+        // also one already in the announced group.
+        if(0 != cmd->buffer[base_idx+1])
+        {
+           if(0 != adaptiv_commish_info.enable_byte)
+           {
+              global_ac_quiet_start((uint16_t)adaptiv_commish_info.auto_time_out);
+           }
+           else
+           {
+              global_ac_quiet_stop();
+           }
+        }
 
         //for(uint8_t i = 0; i < 12; i++) { sl_zigbee_app_debug_print("0x%X ", cmd->buffer[base_idx+i]); }
         //sl_zigbee_app_debug_println(" "); //JGR

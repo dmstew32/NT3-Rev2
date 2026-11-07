@@ -230,6 +230,11 @@ void force_factory_reset(uint32_t delay_ms, reset_reason_t reason)
   sl_zigbee_af_event_set_delay_ms(&factory_reset_event, delay_ms);
 }
 
+bool factory_reset_in_progress(void)
+{
+  return(sl_zigbee_af_event_is_scheduled(&factory_reset_event));
+}
+
 void nwk_down_clean_up(void)
 {
   if(!factory_reset_cmd)

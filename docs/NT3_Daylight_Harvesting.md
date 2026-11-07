@@ -219,6 +219,9 @@ occupancy keepalive. If the multicast does not come back, the master has not mov
 When the timer ends, it works out the level again and sends it, which also covers
 lights that missed the first one.
 
+**During global auto commissioning** (section 9) the master sends no level. It works
+the level out again at each average, so DH resumes as soon as that ends.
+
 **A refused send** starts no timer and isn't retried. The next average, 5 s later,
 acts as the retry. Heavy broadcast traffic doesn't hold a level.
 
@@ -246,6 +249,7 @@ including the master's own.
 | Occupancy wake | The light wakes at the wake level, not the last DH level. In a bright room DH then brings it down. |
 | Occupancy at MID or OFF | Master stops, and a light at MID or OFF ignores DH levels. |
 | Red LED on | The reading is not used, because the LED reaches the sensor. |
+| Global auto commissioning announce (global = true) | No DH Level Adjust multicasts until its timeout ends. Master selection still works. |
 | Flashes (master selected, config write, firmware version match) | The light returns to its prior level, or off if it was off. Ending auto commissioning still goes to max. |
 | Max level (trim) raised, by the buttons or a config write | The light goes to the new max level, which is also the level occupancy wakes to. DH then adjusts it. A lower max only limits the level. |
 

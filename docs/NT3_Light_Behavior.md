@@ -412,6 +412,13 @@ prior level, or off if the light was off.
   down continuously until it is added to a group, or the time-out expires
   (5 min by default, or the Twitch's value). Being added to a group stops it
   and returns the light to max.
+- **Global auto commissioning:** an auto-commissioning announce with global = true
+  makes every light that hears it stop sending occupancy (keepalive, level change)
+  and daylight harvesting multicasts until the announced timeout ends (0 = 5 min),
+  or a global announce with enabled = false. A later announce only extends the
+  time. Meanwhile each light runs occupancy on its own: someone walking in turns
+  on only that light, and each light dims and turns off on its own timer. Button
+  and Twitch settings are still sent. Not saved: a restart ends it.
 - **Local auto-commission** (T×6 + D×6): manual add mode, plus the light
   broadcasts the announce itself 3 times, 3 s apart (doing the Twitch's job).
 

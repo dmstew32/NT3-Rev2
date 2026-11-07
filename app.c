@@ -74,6 +74,7 @@
 
 #define ATTEMPT_TO_JOIN_COUNT      (ATTEMPT_TO_JOIN_LONG_MS/ATTEMPT_TO_JOIN_PERIOD_MS)
 #define JOINED_PERIOD_MS           (10UL*60UL*1000UL)
+#define COMMISSIONING_WAIT_FOR_RESET_MS (1000UL)   // check again while a factory reset runs
 
 #define PRINT_NWK_PARAMS
 
@@ -98,6 +99,16 @@ static void commissioning_event_handler(sl_zigbee_af_event_t *event)
 {
   sl_zigbee_network_status_t nwk_state = sl_zigbee_af_network_state();
   (void)event;
+
+  if((SL_ZIGBEE_JOINED_NETWORK != nwk_state) && factory_reset_in_progress())
+  {
+     // Leaving for a factory reset (also a commissioning cluster network switch).
+     // Joining now would leave the reset waiting for the network to go down, with
+     // red held on, forever.  The reset ends with a chip restart, and the join
+     // starts after that.
+     sl_zigbee_af_event_set_delay_ms(&commissioning_event, COMMISSIONING_WAIT_FOR_RESET_MS);
+     return;
+  }
 
   if(SL_ZIGBEE_JOINED_NETWORK == nwk_state)
   {

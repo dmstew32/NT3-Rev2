@@ -13,8 +13,10 @@
 
 extern "C" {
 #include "nt3_test_stubs.h"
+#include "auto_comm.h"
 void adaptiv_group_added(bool addSub);
 void adaptiv_group_added_by_command(void);
+bool auto_commission_incoming_cmd(sl_zigbee_af_cluster_command_t *cmd);
 }
 
 DEFINE_FFF_GLOBALS
@@ -108,4 +110,98 @@ TEST_F(AutoCommGroupAdded, RemovedGroupOnlyUpdatesTheBindings)
     EXPECT_EQ(0u, dim_lights_up_down_fake.call_count);
     EXPECT_EQ(1u, update_bindingTable_address_fake.call_count);
     EXPECT_FALSE(m_token_written);
+}
+
+/* --------------------------------------------------------------- global auto commissioning */
+static uint32_t m_now;
+static uint32_t now(void) { return m_now; }
+
+class AutoCommGlobal : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        RESET_FAKE(get_time_ms); RESET_FAKE(get_number_of_multicast_bindings); RESET_FAKE(addTask);
+        RESET_FAKE(is_app_flags_nonvol_set); RESET_FAKE(sl_token_set_data); RESET_FAKE(sl_token_get_data);
+        FFF_RESET_HISTORY();
+        m_now = 1000;
+        get_time_ms_fake.custom_fake = now;
+        global_ac_quiet_stop();
+    }
+
+    // Announce: enabled, global, resets, session (2), group (2), timeout (2), ..., src ep (byte 11)
+    static void announce(bool enabled, bool global, uint16_t timeout_s, uint16_t group = 0x1234)
+    {
+        uint8_t bytes[5 + 12] = { 0x15, 0x74, 0x15, 0x42, ZCL_ADAPTIV_COMMISH_CMD_ANNOUNCE_GROUP,
+                                  (uint8_t)enabled, (uint8_t)global, 0, 0x01, 0x00,
+                                  (uint8_t)group, (uint8_t)(group >> 8), (uint8_t)timeout_s, (uint8_t)(timeout_s >> 8),
+                                  0, 0, 1 };
+        sl_zigbee_af_cluster_command_t cmd = {};
+        cmd.buffer = bytes;
+        cmd.bufLen = sizeof(bytes);
+        cmd.payloadStartIndex = 5;
+        cmd.commandId = ZCL_ADAPTIV_COMMISH_CMD_ANNOUNCE_GROUP;
+        auto_commission_incoming_cmd(&cmd);
+    }
+};
+
+TEST_F(AutoCommGlobal, AGlobalAnnounceStopsMulticastsForItsTimeout)
+{
+    EXPECT_FALSE(global_ac_quiet_active());
+    announce(true, true, 120);
+    EXPECT_TRUE(global_ac_quiet_active());
+    m_now += 119999UL;
+    EXPECT_TRUE(global_ac_quiet_active());
+    m_now += 1UL;
+    EXPECT_FALSE(global_ac_quiet_active());
+}
+
+TEST_F(AutoCommGlobal, ALocalAnnounceChangesNothing)
+{
+    announce(true, false, 120);
+    EXPECT_FALSE(global_ac_quiet_active());
+}
+
+TEST_F(AutoCommGlobal, ALaterAnnounceExtendsButNeverShortens)
+{
+    announce(true, true, 120);
+    m_now += 60000UL;
+    announce(true, true, 30);           // Would end sooner: ignored
+    m_now += 50000UL;
+    EXPECT_TRUE(global_ac_quiet_active());
+    announce(true, true, 300);          // Ends later: extends
+    m_now += 200000UL;
+    EXPECT_TRUE(global_ac_quiet_active());
+    m_now += 100000UL;
+    EXPECT_FALSE(global_ac_quiet_active());
+}
+
+TEST_F(AutoCommGlobal, AGlobalAnnounceWithEnabledFalseEndsItEarly)
+{
+    announce(true, true, 120);
+    announce(false, true, 120);
+    EXPECT_FALSE(global_ac_quiet_active());
+}
+
+TEST_F(AutoCommGlobal, ATimeoutOfZeroMeansFiveMinutes)
+{
+    announce(true, true, 0);
+    m_now += 299999UL;
+    EXPECT_TRUE(global_ac_quiet_active());
+    m_now += 1UL;
+    EXPECT_FALSE(global_ac_quiet_active());
+}
+
+static uint8_t one_binding(void) { return 1; }
+static void in_group_1234(uint8_t, device_binding_info_t *info) { info->group_address = 0x1234; info->dst_ep = LIGHT_ENDPOINT; }
+
+TEST_F(AutoCommGlobal, ALightAlreadyInTheAnnouncedGroupAlsoGoesQuiet)
+{
+    get_number_of_multicast_bindings_fake.custom_fake = one_binding;
+    get_multicast_info_fake.custom_fake = in_group_1234;
+    announce(true, true, 120, 0x1234);
+    EXPECT_TRUE(global_ac_quiet_active());
+    EXPECT_EQ(0u, sl_token_set_data_fake.call_count);   // otherwise ignored, as before
+    get_number_of_multicast_bindings_fake.custom_fake = nullptr;
+    get_multicast_info_fake.custom_fake = nullptr;
 }

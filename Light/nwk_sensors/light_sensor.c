@@ -9,6 +9,7 @@
 #include "light_sensor.h"
 #include "dh_control.h"
 #include "dh_debug.h"
+#include "auto_comm.h"
 #include "broadcast_monitor.h"
 #include "light_on_off.h"
 #include "nwk_utils.h"
@@ -72,6 +73,10 @@ static uint8_t dh_debug_mode_flags(void)
 static bool dh_send_level(void *ctx, uint8_t current_level, uint8_t target_level, uint8_t duration_sec)
 {
   (void)ctx;
+  if(global_ac_quiet_active())
+  {
+     return(false);    // Not sent: nobody moves, worked out again at the next average
+  }
   bool sent = tx_dh_level_adjust(current_level, target_level, duration_sec);
 
   #if (1 <= LIGHT_SENSOR_PRINT)

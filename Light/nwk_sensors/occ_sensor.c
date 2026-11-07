@@ -18,6 +18,7 @@
 #include "light_on_off.h"
 #include "light_sensor.h"
 #include "broadcast_monitor.h"
+#include "auto_comm.h"
 
 #include "sl_zigbee_debug_print.h"
 
@@ -319,6 +320,12 @@ static bool grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t sta
                                occ_keepalive_reason_t reason, uint8_t level)
 {
   (void)ctx;
+  if(global_ac_quiet_active())
+  {
+     // Not sent, but carried on as if it were: this light runs on its own.  A wake
+     // turns only this light on (occ_group: own wake not back in time).
+     return(true);
+  }
   bool sent = tx_occ_keepalive(time_s, (uint8_t)state, (uint8_t)reason, level);
   #if (OCC_PRINT >= 1)
   sl_zigbee_app_debug_println("OCC TX keepalive %s %d s lvl:%d%s   <%d>",
@@ -331,6 +338,10 @@ static bool grp_send_keepalive(void *ctx, uint16_t time_s, occ_group_state_t sta
 static bool grp_send_level_change(void *ctx, occ_group_state_t state, uint8_t level)
 {
   (void)ctx;
+  if(global_ac_quiet_active())
+  {
+     return(true);     // Not sent: this light changes on its own timer
+  }
   bool sent = tx_occ_level_change((uint8_t)state, level);
   #if (OCC_PRINT >= 1)
   sl_zigbee_app_debug_println("OCC TX level change %d lvl:%d%s   <%d>", state, level,
