@@ -19,6 +19,8 @@
 #include "hal_buttons.h"
 #include "light_levels.h"
 
+extern sl_zigbee_af_zcl_request_status_t sl_zigbee_af_on_off_cluster_off_cb(void);
+
 static uint8_t _max_light_level = DEFAULT_MAX_LIGHT_LEVEL;
 static uint8_t _mid_light_level = DEFAULT_MID_LIGHT_LEVEL;
 static uint8_t _min_light_level = DEFAULT_MIN_LIGHT_LEVEL;
@@ -28,6 +30,7 @@ static sl_zigbee_af_event_t dim_lights_up_down_event;
 static uint16_t dim_cycles = 0;
 static uint16_t dim_period_Dsecs = 10;
 static uint8_t dim_original_level = DEFAULT_MAX_LIGHT_LEVEL;
+static bool dim_original_on = true;
 
 void dim_lights_up_down_handler(void);
 
@@ -67,11 +70,14 @@ void dim_lights_up_down_handler(void)
      sl_zigbee_af_event_set_delay_ms(&dim_lights_up_down_event,
                                  ((uint32_t)dim_period_Dsecs*100UL) + 250UL);
   }
+  else if(dim_original_on)
+  {
+     // Back to the level before the flashes (limited to the max level by the move)
+     move_to_level_onoff(dim_original_level, 0);
+  }
   else
   {
-     // Make sure
-     //move_to_level_onoff(dim_original_level, 0);
-     move_to_level_onoff(get_max_light_level(), 0);
+     sl_zigbee_af_on_off_cluster_off_cb();
   }
 }
 
@@ -85,13 +91,13 @@ void dim_lights_up_down(uint16_t cycles, uint16_t ramp_Dsecs)
   if(!sl_zigbee_af_event_is_scheduled(&dim_lights_up_down_event))
   {
      dim_original_level = get_present_light_level();
+     dim_original_on = (0 != read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID));
      sl_zigbee_af_event_set_active(&dim_lights_up_down_event);
   }
   else if(0 == cycles)
   {
-     // Turn off flashing
+     // Turn off flashing: commissioning is over, the light goes to max
      sl_zigbee_af_event_set_inactive(&dim_lights_up_down_event);
-     //move_to_level_onoff(dim_original_level, 0);
      move_to_level_onoff(get_max_light_level(), 0);
 
   }
@@ -117,6 +123,8 @@ static void set_light_to_max_level_task(taskParm_t parm0, taskParm_t parm1)
   {
      removeTask(set_light_to_max_level_task);
      move_to_level_onoff(light_level_ceiling(), 0);
+     // Also the level occupancy wakes to
+     occ_sensor_set_switch_level(light_level_ceiling());
   }
 }
 // New requirement, 6/21/26
@@ -238,11 +246,17 @@ static void store_max_light_level(uint8_t new_max_level)
 
 void save_max_light_level(uint8_t new_max_level)
 {
+  // Daintree: the max maps the level, so full on follows it either way
+  bool go_to_max = (new_max_level > _max_light_level) || levels_are_mapped();
+
   adjust_light_level_for_new_max_limit(new_max_level);
   store_max_light_level(new_max_level);
 
-  // If new max level, go there
-  start_task_move_to_max_level();
+  // Max raised: go there.  A lower max only limits the level (above).
+  if(go_to_max)
+  {
+     start_task_move_to_max_level();
+  }
 }
 
 // Daintree only
@@ -299,6 +313,7 @@ void init_light_parameters(void)
 
   sl_token_get_data(TOKEN_APP_LIGHT_LEVEL_MAX, 0, &_max_light_level, 1);
   save_max_light_level(_max_light_level);
+  start_task_move_to_max_level();     // Power up: max
 
   sl_token_get_data(TOKEN_APP_ALLOW_LIGHT_OFF, 0, &_allow_light_off, 1);
   save_allow_light_off(_allow_light_off);

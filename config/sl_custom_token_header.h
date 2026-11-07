@@ -195,7 +195,7 @@ DEFINE_BASIC_TOKEN(BASICTOKEN1,
 
 #define NVM3KEY_APP_ON_OFF_CYCLES             (NVM3KEY_DOMAIN_USER | 0x0F20)
 
-#define NVM3KEY_APP_DHS_GAIN                  (NVM3KEY_DOMAIN_USER | 0x0F21)
+// 0x0F21: was the daylight harvesting gain.  Don't reuse.
 
 
 #ifdef DEFINETYPES
@@ -247,7 +247,6 @@ typedef struct{
  DEFINE_BASIC_TOKEN(APP_OCC_THRESHOLD, uint16_t, DEFAULT_OCC_SENSOR_THRESHOLD)
 
  DEFINE_BASIC_TOKEN(APP_ON_OFF_CYCLES, uint8_t, 0x00)
- DEFINE_BASIC_TOKEN(APP_DHS_GAIN, int16_t, 0x01)
 
  #endif
 

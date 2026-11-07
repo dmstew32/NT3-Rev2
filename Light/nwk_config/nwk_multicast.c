@@ -254,15 +254,15 @@ bool tx_color_new_temp(uint16_t new_color)
   return(true);
 }
 
-// If this device is in a group(s) will send a multicast to the  group(s).
-// Send ZCL_SUSPEND_LIGHT_SENSOR_COMMAND_ID with suspension
-bool tx_light_sensor_suspend_time(uint16_t Dsec_time)
+// Daylight harvesting master: the group's new level.  False = the stack refused it.
+// Send ZCL_DH_LEVEL_ADJUST_COMMAND_ID to ZCL_ILLUM_MEASUREMENT_CLUSTER_ID
+bool tx_dh_level_adjust(uint8_t current_level, uint8_t target_level, uint8_t duration_sec)
 {
   uint8_t message[8] = {0};
 
   if(eADAPTIV_NWK != get_present_network())
   {
-     return(true);
+     return(false);
   }
 
   sl_zigbee_aps_frame_t apsFrame = _apsFrame;
@@ -273,26 +273,24 @@ bool tx_light_sensor_suspend_time(uint16_t Dsec_time)
   message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[3] = sl_zigbee_af_next_sequence();
-  message[4] = ZCL_SUSPEND_LIGHT_SENSOR_COMMAND_ID;
+  message[4] = ZCL_DH_LEVEL_ADJUST_COMMAND_ID;
   // Payload
-  message[5] = GET_LSB_FROM_16(Dsec_time);    // xtion time lsb
-  message[6] = GET_MSB_FROM_16(Dsec_time);
-  message[7] = 0;     // Options
+  message[5] = current_level;
+  message[6] = target_level;
+  message[7] = duration_sec;
 
-  tx_multicast(&apsFrame, &message[0], sizeof(message));
-
-  return(true);
+  return(tx_multicast(&apsFrame, &message[0], sizeof(message)));
 }
 
-// This device will braodcast Adaptiv unique info
-// Send ZCL_WRITE_LIGHT_SENSOR_COMMAND_ID to ZCL_ILLUM_MEASUREMENT_CLUSTER_ID
-bool tx_light_sensor_data(uint8_t *data, uint8_t length)
+// Daylight harvesting: this light was just selected as the group's master.
+// False = the stack refused it.
+bool tx_dh_master_claim(void)
 {
-  uint8_t message[24] = {0};
+  uint8_t message[5] = {0};
 
   if(eADAPTIV_NWK != get_present_network())
   {
-     return(true);
+     return(false);
   }
 
   sl_zigbee_aps_frame_t apsFrame = _apsFrame;
@@ -303,13 +301,9 @@ bool tx_light_sensor_data(uint8_t *data, uint8_t length)
   message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
   message[3] = sl_zigbee_af_next_sequence();
-  message[4] = ZCL_WRITE_LIGHT_SENSOR_COMMAND_ID;
+  message[4] = ZCL_DH_MASTER_CLAIM_COMMAND_ID;
 
-  memcpy(&message[5], data, length);
-
-  tx_multicast(&apsFrame, &message[0], length+5);
-
-  return(true);
+  return(tx_multicast(&apsFrame, &message[0], sizeof(message)));
 }
 
 #ifdef DHS_SINK_DEVICE

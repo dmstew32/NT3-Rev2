@@ -28,6 +28,7 @@ source:
 - {path: Light/hal/hal_utils.c}
 - {path: Light/nwk_config/adaptiv_config.c}
 - {path: Light/nwk_config/nwk_multicast.c}
+- {path: Light/nwk_mgmt/dh_debug.c}
 - {path: Light/nwk_mgmt/factory_reset.c}
 - {path: Light/nwk_mgmt/nwk_commission.c}
 - {path: Light/nwk_mgmt/nwk_groups.c}
@@ -36,6 +37,7 @@ source:
 - {path: Light/nwk_monitor/ota_diag.c}
 - {path: Light/nwk_monitor/ota_diag_tx.c}
 - {path: Light/nwk_on_off/light_on_off.c}
+- {path: Light/nwk_sensors/dh_control.c}
 - {path: Light/nwk_sensors/light_sensor.c}
 - {path: Light/nwk_sensors/occ_sensor.c}
 - {path: Light/tasker/RehTOS.c}
@@ -79,6 +81,7 @@ include:
   - {path: nwk_multicast.h}
 - path: Light/nwk_mgmt
   file_list:
+  - {path: dh_debug.h}
   - {path: factory_reset.h}
   - {path: nwk_commission.h}
   - {path: nwk_groups.h}
@@ -92,6 +95,7 @@ include:
   - {path: light_on_off.h}
 - path: Light/nwk_sensors
   file_list:
+  - {path: dh_control.h}
   - {path: light_sensor.h}
   - {path: occ_sensor.h}
 - path: Light/tasker

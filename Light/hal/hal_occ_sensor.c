@@ -53,22 +53,9 @@ void hal_init_occ_sensor(void)
   sl_zigbee_af_event_init(&occ_sensor_event, occ_sensor_handler);
 }
 
-void hal_set_occ_sensor_info(occ_info_t *occ_information)
-{
-  occ_info = *occ_information;
-
-#if (1 <= HAL_OCC_PRINT)
-     sl_zigbee_app_debug_println("OCC threshold %d",occ_info.occ_threshold);
-#endif
-}
 void hal_get_occ_sensor_info(occ_info_t *occ_information)
 {
   *occ_information = occ_info;
-}
-
-void hal_set_long_delay_bit(uint8_t new_long_delay)
-{
-  occ_info.b_long_delay = new_long_delay;
 }
 
 // Bit bang

@@ -44,11 +44,8 @@ void hal_init_occ_sensor(void);
 void hal_start_occ_sensor(void);
 void hal_stop_occ_sensor(void);
 void hal_get_occ_sensor_info(occ_info_t *occ_information);
-void hal_set_occ_sensor_info(occ_info_t *occ_information);
 
 
-void hal_reset_occ_sensor_state(void);
-void hal_set_long_delay_bit(uint8_t new_long_delay);
 
 void save_adaptiv_unoccupied_delay(uint16_t new_unoccupied_delay);
 void save_adaptiv_unoccupied_delay_to_off(uint16_t new_unoccupied_delay_to_off);

@@ -90,6 +90,7 @@ typedef struct
   bool (*send_level_change)(void *ctx, occ_group_state_t state, uint8_t level);
   uint32_t (*random_ms)(void *ctx, uint32_t max_ms);         // 0 .. max_ms
   bool (*broadcast_traffic_heavy)(void *ctx);                // hold sends while true
+  void (*woke_from_off)(void *ctx);                          // OFF -> ON because of occupancy
 } occ_group_ops_t;
 
 typedef enum

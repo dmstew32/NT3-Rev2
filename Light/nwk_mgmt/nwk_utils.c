@@ -25,6 +25,7 @@
 #include "reporting.h"
 #include "light_on_off.h"
 #include "light_sensor.h"
+#include "dh_debug.h"
 #include "adaptiv_config.h"
 #include "nwk_multicast.h"
 #include "nwk_groups.h"
@@ -316,15 +317,13 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
         }
         case ZCL_ILLUM_MEASUREMENT_CLUSTER_ID:
         {
-           if(ZCL_SUSPEND_LIGHT_SENSOR_COMMAND_ID == cmd->commandId)
+           if(ZCL_DH_LEVEL_ADJUST_COMMAND_ID == cmd->commandId)
            {
-              uint16_t Dsecs = GET_16_FROM_ARRAY(cmd->buffer, cmd->payloadStartIndex);
-              return_status = suspend_light_sensor_control(Dsecs);
+              return_status = dh_rx_level_adjust(cmd);
            }
-           else if(ZCL_WRITE_LIGHT_SENSOR_COMMAND_ID == cmd->commandId)
+           else if(ZCL_DH_MASTER_CLAIM_COMMAND_ID == cmd->commandId)
            {
-              update_light_sensor_neighbor_table(cmd);
-              return_status = true;
+              return_status = dh_rx_master_claim(cmd);
            }
            break;
         }
@@ -332,7 +331,7 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
         {
           if(ZCL_ADAPTIV_DEBUG_COMMAND_ID == cmd->commandId)
           {
-              return_status = rx_sink_debug(cmd);
+              return_status = dh_debug_rx(cmd);
           }
            break;
         }
@@ -844,9 +843,9 @@ void spew_app_info(void)
   #endif
 
   //#endif  //defined(DHS_SINK_DEVICE) || defined(DHS_SOURCE_DEVICE) || defined(DHS_DOUBLE) || defined(DISABLE_LIGHT_SENSOR_CONTROL)
-  if(sink_debug_enabled())
+  if(DH_DEBUG_TARGET_NONE != dh_debug_get_target())
   {
-     sl_zigbee_app_debug_println("  WARNING:  Debug is set");
+     sl_zigbee_app_debug_println("  WARNING:  DH debug target 0x%04X", dh_debug_get_target());
   }
 
 
@@ -855,159 +854,37 @@ void spew_app_info(void)
 
 
 /*********************************************************************************/
-/*********************      SINK/SOURCE DEBUG     ********************************/
+/*********************        DEBUG SINK          ********************************/
 /*********************************************************************************/
 
-typedef struct
-{
-  bool enable;
-  sl_802154_short_addr_t sink_short_addr;
-  sl_802154_long_addr_t sink_eui64;
-} sink_debug_info_t;
-static sink_debug_info_t sink_debug_info = {0};
-
 #ifdef DHS_SINK_DEVICE
-void init_sink_debug(void)
+// Cmd from cli with input cmd.  This light as the debug target of its group.
+static void sink_send_target(uint16_t node_id)
 {
-  sl_802154_long_addr_t sink_eui64;
-  sink_debug_info.sink_short_addr = sl_zigbee_af_get_node_id();
-  sl_zigbee_af_get_eui64(sink_eui64);
-  memcpy(sink_debug_info.sink_eui64, sink_eui64, sizeof(sl_802154_long_addr_t));
-  sl_zigbee_app_debug_println("SINK init 0x%X   short 0x%X",
-      GET_16_FROM_ARRAY(sink_debug_info.sink_eui64, 0), sink_debug_info.sink_short_addr);
+  uint8_t message[3];
+
+  message[0] = SINK_SHORT_ADDR;
+  message[1] = GET_LSB_FROM_16(node_id);
+  message[2] = GET_MSB_FROM_16(node_id);
+  tx_sink_info(message, sizeof(message));
+  sl_zigbee_app_debug_println("Multi-cast debug target 0x%X", node_id);
 }
 
-
-// Cmd from cli with input cmd
 void sink_setup(uint8_t cmd)
 {
-  uint8_t message[8] = {0};
-
   switch(cmd)
   {
-    case 0:
-        sink_debug_info.enable = false;
-        message[0] = SINK_SOURCE_DISABLE;
-        tx_sink_info(message, 1);
-        sl_zigbee_app_debug_println("SINK OFF");
-        break;
-     case 1:
-        sink_debug_info.enable = true;
-        message[0] = SINK_SOURCE_ENABLE;
-        tx_sink_info(message, 1);
-        sl_zigbee_app_debug_println("SINK ON");
+     case 0:
+        sink_send_target(DH_DEBUG_TARGET_NONE);
         break;
      case 2:
-        message[0] = SINK_SHORT_ADDR;
-        message[1] = GET_LSB_FROM_16(sink_debug_info.sink_short_addr);
-        message[2] = GET_MSB_FROM_16(sink_debug_info.sink_short_addr);
-        tx_sink_info(message, 3);
-        sl_zigbee_app_debug_println("Multi-cast SINK Addr 0x%X", sink_debug_info.sink_short_addr);
+        sink_send_target(sl_zigbee_af_get_node_id());
         break;
      default:
-        sl_zigbee_app_debug_println("SINK %s Addr 0x%X", (sink_debug_info.enable) ? "ON" : "OFF"
-                                             ,sink_debug_info.sink_short_addr);
+        sl_zigbee_app_debug_println("SINK Addr 0x%X", sl_zigbee_af_get_node_id());
         break;
   }
 }
 #else
-void init_sink_debug(void) { }
 void sink_setup(uint8_t cmd) { }
 #endif
-
-// Uni-casts this devices debug data to a sink device
-sl_status_t tx_source_debug(uint8_t *data, uint8_t length)
-{
-  uint8_t message[16] = {0};
-  sl_802154_short_addr_t sink_short_addr = sink_debug_info.sink_short_addr;
-  sl_status_t status = SL_STATUS_OK;
-  sl_zigbee_aps_frame_t apsFrame =
-  {
-     .profileId = HA_PROFILE_ID,
-     .clusterId = ZCL_ADAPTIV_DEBUG_CLUSTER_ID,
-     .sourceEndpoint = LIGHT_ENDPOINT,
-     .destinationEndpoint = LIGHT_ENDPOINT,
-     .options = SL_ZIGBEE_APS_OPTION_NONE,
-     .radius = ZA_MAX_HOPS,
-     .groupId = 0,
-  };
-
-  if(false == sink_debug_info.enable)
-  {
-     return(0);
-  }
-
-  message[0] = (ZCL_CLUSTER_SPECIFIC_COMMAND | ZCL_FRAME_CONTROL_CLIENT_TO_SERVER |
-                ZCL_MANUFACTURER_SPECIFIC_MASK | ZCL_DISABLE_DEFAULT_RESPONSE_MASK);
-  message[1] = GET_LSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
-  message[2] = GET_MSB_FROM_16(ADAPTIV_ZIGBEE_MFG_ID);
-  message[3] = sl_zigbee_af_next_sequence();
-  message[4] = ZCL_ADAPTIV_DEBUG_COMMAND_ID;
-
-  memcpy(&message[5], data, length);
-
-  uint8_t message_length  = length + 6;
-  assert(sizeof(message) > message_length);
-
-  status = sl_zigbee_af_send_unicast(SL_ZIGBEE_OUTGOING_DIRECT,
-                                     sink_short_addr,
-                                     &apsFrame,
-                                     (uint16_t)message_length,
-                                     (uint8_t *)&message[0]);
-
-  if(status)
-  {
-     sl_zigbee_app_debug_println("FAIL: ping_coordinator 0x%X", status);
-  }
-  return(status);
-}
-
-// This is incoming from an tx_source_debug() cmd.  Used both sink and source
-bool rx_sink_debug(sl_zigbee_af_cluster_command_t* cmd)
-{
-  uint8_t base_idx = cmd->payloadStartIndex;
-
-  uint8_t op_code = cmd->buffer[base_idx+0];
-  uint16_t macID = GET_16_FROM_ARRAY(cmd->buffer, base_idx+1);
-  uint16_t lux = GET_16_FROM_ARRAY(cmd->buffer, (base_idx+3));
-  uint8_t pwm = cmd->buffer[base_idx+5];
-  uint8_t mode = cmd->buffer[base_idx+6];   // [Counter | Mode >> Shifted]
-
-  switch(op_code)
-  {
-     case SINK_SOURCE_DISABLE:
-        sink_debug_info.enable = false;
-        sl_zigbee_app_debug_println("Sinking OFF");
-        break;
-     case SINK_SOURCE_ENABLE:
-        sink_debug_info.enable = true;
-        sl_zigbee_app_debug_println("Sinking ON");
-        break;
-     case SINK_SHORT_ADDR:
-        sl_zigbee_app_debug_println("Sink short 0x%X", macID);
-        sink_debug_info.sink_short_addr = macID;
-        break;
-     case DHS_DATA:
-        sl_zigbee_app_debug_print("[mac:0x%04X, time:%d, ", macID, get_time_ms()/1000UL);
-        sl_zigbee_app_debug_println("lux:%d, level:%d, mode:%d]", lux, pwm, mode);
-        break;
-     case DHS_CAL_DATA:
-        sl_zigbee_app_debug_print("[CAL id:0x%04X, t:%d, ", macID, get_time_ms()/1000UL);
-        sl_zigbee_app_debug_println("mean_err:%d, median_err:%d, n:%d]", cmd->buffer[base_idx+3],
-                                    cmd->buffer[base_idx+4], cmd->buffer[base_idx+5]);
-        break;
-     case DHS_MST_DATA:
-       sl_zigbee_app_debug_print("[MST id:0x%04X, t:%d, ", macID, get_time_ms()/1000UL);
-       sl_zigbee_app_debug_println("mean_lux:%d, pwm:%d, dim_t:%d, err:%d]", lux, pwm, mode,
-                                           (int8_t)cmd->buffer[base_idx+7]);
-       break;
-     default:
-        break;
-  }
-  return(true);
-}
-
-bool sink_debug_enabled(void)
-{
-  return(sink_debug_info.enable);
-}

@@ -19,6 +19,7 @@
  *  Factory reset running               red    on until done
  *  Firmware version                    r/g/r  major red, middle green, minor red, 500/500 ms
  *  Motion detected                     green  on, stays on 1.25 s after the last detection
+ *  DH master, motion detected          green  off ~185 ms every 2.5 s (lux reading)
  *  Bad occupancy sensor                green  toggles every sample (fast flicker)
  *  Occupancy sensor stopped            green  off
  *
@@ -32,7 +33,8 @@
  * Green priority: green flash  >  lux reading  >  occupancy.
  *   Every light sensor reading is taken with green off (at most ~185 ms);
  *   occupancy resumes when a flash or reading ends.  While green is lit
- *   that happens once per 20 s light sensor average (hal_light_sensor.c).
+ *   that happens once per 20 s, except on the daylight harvesting master,
+ *   which reads every 2.5 s (hal_light_sensor.c).
  */
 
 #include <stdbool.h>

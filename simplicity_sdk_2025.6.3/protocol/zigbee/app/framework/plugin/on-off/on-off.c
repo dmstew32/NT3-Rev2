@@ -452,6 +452,9 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
   sl_zigbee_af_cluster_command_t *cmd = (sl_zigbee_af_cluster_command_t *)context->data;
 
   if (!cmd->mfgSpecific) {
+#ifdef ADAPTIV_LIGHT
+    dh_disable();
+#endif // ADAPTIV_LIGHT
     switch (cmd->commandId) {
       case ZCL_OFF_COMMAND_ID:
       {
