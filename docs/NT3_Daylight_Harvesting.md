@@ -139,7 +139,7 @@ needs neither a target nor to be the master.
 | 6 | Light level below 10 % (`MIN_ALLOWABLE_LIGHT_LEVEL`, 25) |
 | 7 | Occupancy at MID or lower |
 | 8 | Unused |
-| 9 | DH disabled while the firmware version is displayed (`B_DISABLE_LIGHT_SENSOR`) |
+| 9 | DH disabled while the firmware version is displayed (`B_DISABLE_LIGHT_SENSOR`), or always in a debug build with `DISABLE_LIGHT_SENSOR_CONTROL` or `DHS_SINK_DEVICE` defined |
 | 10 | Not the master |
 
 ---
@@ -233,7 +233,8 @@ including the master's own.
 
 1. A master that hears a level from a lower node ID stops being the master.
 2. A light with any inhibit set (section 5) ignores the level. So a light that is off,
-   at MID, suspended or has DH disabled stays as it is.
+   at MID, suspended or has DH disabled stays as it is. A target level of 0 is also
+   ignored.
 3. Otherwise it calls `move_to_level_dhs(target, duration × 10)`, which limits the
    level to this light's max and does nothing while a switch dimming command is active.
 

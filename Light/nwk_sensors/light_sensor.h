@@ -5,16 +5,12 @@
 
 typedef struct
 {
-  uint16_t mean_lux;
-  uint16_t last_mean_lux;
-  uint8_t pwm_value;
-  uint8_t pwm_saturated_count : 3;  // Counter
-  uint8_t unused              : 5;
+  uint16_t mean_lux;     // 20 s average, calibrated
 } light_sensor_data_t;
 
 void light_sensor_init(void);
 void start_reading_light_sensor(void);
-void stop_reading_light_sensor(void);
+void stop_reading_light_sensor(void);    // Only the unit tests use it
 void execute_light_sensor_logic(light_sensor_info_t *light_sensor_info);
 
 bool suspend_light_sensor_control(uint32_t delay_ms);
@@ -28,7 +24,6 @@ void dh_disable(void);
 void dh_enable(void);
 void light_sensor_on_reading(uint16_t reading);
 
-uint16_t read_light_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID);
 bool write_light_sensor_attribute( sl_zigbee_af_attribute_id_t attributeID, uint16_t data);
 
 void save_light_lux_reference(uint16_t lux_ref);

@@ -183,7 +183,7 @@ whole group.
 ### 5.1 Sensor and LED (all networks)
 
 - PIR sensor sampled every **75 ms**. Motion = the change from the running
-  average exceeds the **threshold** (default 80; D×11 = 80, D×12 = 60, lower
+  average exceeds the **threshold** (default 80; D×11 = 80, D×12 = 40, lower
   is more sensitive). A reading outside the valid range marks the sensor as
   bad.
 - **Green LED:** on while motion is detected, off 1.25 s after the last
@@ -192,7 +192,8 @@ whole group.
 - **Light sensor readings and green:** each lux reading needs green off for
   about 181 ms. While green is lit, a real reading is taken only once per
   20 s (one short blink every 20 s while occupied); otherwise the last reading
-  is reused.
+  is reused. The daylight harvesting master takes a real reading every 2.5 s,
+  so its green blinks off every 2.5 s while occupied.
 - The sensor's occupancy attribute is reported on endpoint 2.
 
 ### 5.2 When occupancy does nothing
@@ -328,6 +329,7 @@ The D-button delays do not apply on Daintree (button settings are rejected).
 | Factory reset running | red | solid until the reset is done |
 | Firmware version | red, green, red | major, middle, minor digit, 500/500 ms |
 | Motion | green | on, off 1.25 s after the last motion |
+| Motion, DH master | green | on, off for ~185 ms every 2.5 s (lux reading) |
 | Bad occupancy sensor | green | fast flicker |
 
 Priorities: factory reset > button feedback > network status (button

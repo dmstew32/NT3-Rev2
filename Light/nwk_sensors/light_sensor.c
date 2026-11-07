@@ -206,6 +206,9 @@ static uint16_t get_dhs_inhibit_bits(void)
   dhs_inhibit_bits |= is_occ_mid_or_lower() ? DHS_INHIBIT_OCC_MID : 0;
   dhs_inhibit_bits |= dh_disabled ? DHS_INHIBIT_DH_DISABLED : 0;
   dhs_inhibit_bits |= is_app_flags_nonvol_set(B_DISABLE_LIGHT_SENSOR) ? DHS_INHIBIT_DISABLED : 0;
+  #if defined(DISABLE_LIGHT_SENSOR_CONTROL) || defined(DHS_SINK_DEVICE)
+  dhs_inhibit_bits |= DHS_INHIBIT_DISABLED;     // Debug build: report lux, no DH
+  #endif
   dhs_inhibit_bits |= is_app_flags_nonvol_set(B_DHS_MASTER_LIGHT) ? 0 : DHS_INHIBIT_NOT_MASTER;
 
   #if (1 <= LIGHT_SENSOR_PRINT)
@@ -384,9 +387,7 @@ else
 }
 
   // Copy local
-  light_sensor_data.last_mean_lux = light_sensor_data.mean_lux;
   light_sensor_data.mean_lux = _lux;
-  light_sensor_data.pwm_value = read_light_level_attribute(ZCL_CURRENT_LEVEL_ATTRIBUTE_ID);
 
   // Generate reported lux value, save in attribute, For Daintree only!!
   uint16_t reported_lux = (uint16_t)(10000.0*log10f((float)_lux))+1; // per spec
@@ -394,14 +395,7 @@ else
 
   #if (1 <= LIGHT_SENSOR_PRINT)
   sl_zigbee_app_debug_println("DHS Reported_lux:%d  Sensor_lux:%d  pwm:%d   <%d>",
-      reported_lux, light_sensor_data.mean_lux, light_sensor_data.pwm_value, get_time_ms());
-  #endif
-
-  #if defined(DISABLE_LIGHT_SENSOR_CONTROL) || defined(DHS_SINK_DEVICE) /* Data collection */
-  #if (1 <= LIGHT_SENSOR_PRINT)
-  sl_zigbee_app_debug_println("This is either a SINK or DHS=DISABLED");
-  #endif
-  return;
+      reported_lux, light_sensor_data.mean_lux, hal_get_dim_pwm_255(), get_time_ms());
   #endif
 }
 
@@ -503,39 +497,6 @@ void save_light_lux_reference(uint16_t lux_ref)
   sl_zigbee_app_debug_println("\n\rNEW LUX REF %d   <%d>", light_sensor_reference, get_time_ms());
 }
 
-uint16_t read_light_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID)
-{
-  uint8_t data[2] = {0};
-  uint8_t size = sizeof(data);
-  sl_zigbee_af_status_t status;
-
-  switch(attributeID)
-  {
-     case ZCL_ILLUM_MEASURED_VALUE_ATTRIBUTE_ID:
-     case ZCL_ILLUM_MIN_MEASURED_VALUE_ATTRIBUTE_ID:
-     case ZCL_ILLUM_MAX_MEASURED_VALUE_ATTRIBUTE_ID:
-     case ZCL_MEASUREMENT_LIGHT_SENSOR_TYPE_ATTRIBUTE_ID:
-     case ZCL_ILLUM_MEASUREMENT_CLUSTER_CLUSTER_REVISION_SERVER_ATTRIBUTE_ID:
-        size = 2;
-        break;
-     case ZCL_ILLUM_MEASUREMENT_CLUSTER_REPORTING_STATUS_SERVER_ATTRIBUTE_ID:
-        size = 1;
-        break;
-     default:
-       sl_zigbee_app_debug_println("Unsupported light sensor attr");
-       break;
-  }
-  status = sl_zigbee_af_read_server_attribute(LIGHT_SENSOR_ENDPOINT,
-                                              ZCL_ILLUM_MEASUREMENT_CLUSTER_ID,
-                                              attributeID,
-                                              (uint8_t *)&data,
-                                              size);
-  if(status != SL_ZIGBEE_ZCL_STATUS_SUCCESS) {
-     sl_zigbee_app_debug_println("ERR:read_light_sensor_attribute 0x%X", status);
-  }
-  return(GET_16_FROM_ARRAY(data, 0));
-}
-
 bool write_light_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID, uint16_t data)
 {
   sl_zigbee_af_attribute_type_t type;
@@ -572,11 +533,7 @@ bool write_light_sensor_attribute(sl_zigbee_af_attribute_id_t attributeID, uint1
      status = false;
   }
   #if (3 <= LIGHT_SENSOR_PRINT)
-     sl_zigbee_app_debug_print("Write ILLUM attr 0x%04X value %d ",
-                                                               attributeID,
-                                                               data);
-     sl_zigbee_app_debug_println("Rd %d   <%d>",read_light_sensor_attribute(attributeID),
-                                                 get_time_ms());
+     sl_zigbee_app_debug_println("Write ILLUM attr 0x%04X value %d   <%d>", attributeID, data, get_time_ms());
   #endif
   return(status);
 }

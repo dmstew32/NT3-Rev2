@@ -151,7 +151,6 @@ void occ_sensor_init(void)
   }
   else if(eADAPTIV_NWK == get_present_network())
   {
-     suspend_light_sensor_control(5000UL);
      occupancy_sensor_info.time_stamp_unoccupied_to_occupied = get_time_ms();
      occupancy_sensor_info.time_stamp_occupied_to_unoccupied = get_time_ms();
      occ_time_stamp = get_time_ms();

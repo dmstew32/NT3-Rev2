@@ -82,7 +82,6 @@ static void update_light_sensor_task(taskParm_t parm0, taskParm_t parm1)
      {
         sum += (uint32_t)light_sensor_info.readings[i];
      }
-     light_sensor_info.last_mean_lux = light_sensor_info.mean_lux;
      light_sensor_info.mean_lux = (uint16_t)(sum/(uint32_t)N_LIGHT_SAMPLES);
 
      // Start logic outside of ember event

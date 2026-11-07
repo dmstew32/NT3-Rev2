@@ -123,7 +123,6 @@
 
 //#define DISABLE_LIGHT_SENSOR_CONTROL     /* Report lux but no adjustment of lights */
 #define ALLOW_DISPLAY_VERSION
-#define NEW_DHS
 
 // These should be commented out for releases
 // and always non-zero levels, 1, 2,..
