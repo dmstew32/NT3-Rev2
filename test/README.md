@@ -26,7 +26,7 @@ One test program per module, like Z3Switch's `light_switch/test`:
 | test_app_leds | Light/leds/app_leds.c (+ network status vs. reference/) |
 | test_hal_light_sensor | Light/hal/hal_light_sensor.c (lux readings with green off) |
 | test_dh_control | Light/nwk_sensors/dh_control.c (daylight harvesting logic, and the loop in simulated rooms) |
-| test_dh_debug | Light/nwk_mgmt/dh_debug.c (debug unicast: address rule, bytes on the air, setting the target) |
+| test_dh_debug | Light/nwk_mgmt/dh_debug.c (DH and lux debug unicasts: address rule, bytes on the air, setting the target) |
 | test_light_sensor | Light/nwk_sensors/light_sensor.c + dh_control (upgrade, following the master, DH disable and enable, one master per group, suspends, diagnostic packet, global auto commissioning) |
 | test_occ_group | Light/occupancy/occ_group.c (one light, and a simulated group of lights) |
 | test_occ_sensor | Light/nwk_sensors/occ_sensor.c Adaptiv part + occ_group + nwk_multicast (bytes on the air) |

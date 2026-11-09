@@ -26,6 +26,7 @@
 // Adaptive commands
 #define ZCL_ADAPTIV_DEBUG_CLUSTER_ID          (0xFCDB)
 #define ZCL_ADAPTIV_DEBUG_COMMAND_ID          (0xDB)
+#define ZCL_ADAPTIV_LUX_DEBUG_COMMAND_ID      (0xD9)   /* Same cluster, see dh_debug.h */
 /* 0xDC, 0xDD, 0xDE: earlier daylight harvesting commands, ignored now */
 #define ZCL_DH_LEVEL_ADJUST_COMMAND_ID        (0xE0)
 #define ZCL_DH_MASTER_CLAIM_COMMAND_ID        (0xDF)

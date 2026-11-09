@@ -333,6 +333,10 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
           {
               return_status = dh_debug_rx(cmd);
           }
+          else if(ZCL_ADAPTIV_LUX_DEBUG_COMMAND_ID == cmd->commandId)
+          {
+              return_status = dh_lux_debug_rx(cmd);
+          }
            break;
         }
         default:

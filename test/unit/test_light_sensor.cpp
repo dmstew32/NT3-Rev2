@@ -59,6 +59,7 @@ FAKE_VALUE_FUNC(sl_status_t, sl_token_set_data, uint32_t, uint32_t, void *, uint
 FAKE_VALUE_FUNC(sl_zigbee_af_status_t, sl_zigbee_af_read_server_attribute, uint8_t, uint16_t, sl_zigbee_af_attribute_id_t, uint8_t *, uint8_t);
 FAKE_VALUE_FUNC(sl_zigbee_af_status_t, sl_zigbee_af_write_server_attribute, uint8_t, uint16_t, sl_zigbee_af_attribute_id_t, uint8_t *, uint8_t);
 FAKE_VALUE_FUNC(bool, dh_debug_send, uint16_t, uint16_t, uint8_t, uint8_t, uint8_t);
+FAKE_VALUE_FUNC(bool, dh_lux_debug_send, uint16_t, uint16_t, uint32_t);
 FAKE_VALUE_FUNC(bool, global_ac_quiet_active);
 FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_println, const char *, ...);
 FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_print, const char *, ...);
@@ -72,7 +73,7 @@ FAKE_VOID_FUNC_VARARG(sl_zigbee_app_debug_print, const char *, ...);
   F(sl_zigbee_get_node_id) F(move_to_level_dhs) \
   F(broadcast_monitor_get_traffic) F(sl_token_get_data) F(sl_token_set_data) \
   F(sl_zigbee_af_read_server_attribute) F(sl_zigbee_af_write_server_attribute) \
-  F(dh_debug_send) F(global_ac_quiet_active) F(sl_zigbee_app_debug_println) F(sl_zigbee_app_debug_print)
+  F(dh_debug_send) F(dh_lux_debug_send) F(global_ac_quiet_active) F(sl_zigbee_app_debug_println) F(sl_zigbee_app_debug_print)
 
 static const sl_802154_short_addr_t MY_NODE = 0x5000, LOWER_NODE = 0x1000, HIGHER_NODE = 0x9000;
 static uint32_t m_now;
@@ -689,6 +690,80 @@ TEST_F(LightSensorDebug, SendingALevelDoesNotItselfSendAPacket)
     pair(350);
     ASSERT_EQ(1u, tx_dh_level_adjust_fake.call_count);
     EXPECT_EQ(0u, dh_debug_send_fake.call_count);
+}
+
+/* --------------------------------------------------------------- lux packet */
+TEST_F(LightSensor, ALuxPacketIsSentEvery2Readings)
+{
+    light_sensor_init();
+    past_suspends();
+    for(unsigned i = 0; i < 8u; i++)
+    {
+        reading(350);
+    }
+    EXPECT_EQ(4u, dh_lux_debug_send_fake.call_count);   // 20 s: every 5 s
+}
+
+TEST_F(LightSensor, TheLuxPacketHasTheRawReadingsAndTheCalibratedLux)
+{
+    light_sensor_init();
+    past_suspends();
+    light_sensor_on_reading(100);
+    EXPECT_EQ(0u, dh_lux_debug_send_fake.call_count);
+    light_sensor_on_reading(201);
+    ASSERT_EQ(1u, dh_lux_debug_send_fake.call_count);
+    EXPECT_EQ(201, dh_lux_debug_send_fake.arg0_val);    // The last reading
+    EXPECT_EQ(150, dh_lux_debug_send_fake.arg1_val);    // The average, before the factor
+    EXPECT_EQ(dh_calibrated_lux(150), dh_lux_debug_send_fake.arg2_val);
+}
+
+TEST_F(LightSensor, TheLuxPacketIsSentEvenWhenDhIsNotRunning)
+{
+    get_present_network_fake.return_val = eDAINTREE_NWK;
+    read_on_off_attribute_fake.return_val = 0;
+    light_sensor_init();                                // Suspended
+    light_sensor_on_reading(100);
+    light_sensor_on_reading(100);
+    EXPECT_EQ(1u, dh_lux_debug_send_fake.call_count);
+}
+
+TEST_F(LightSensor, ACalibratedLuxAbove16BitsIsNotCut)
+{
+    light_sensor_init();
+    light_sensor_on_reading(0xFFFF);
+    light_sensor_on_reading(0xFFFF);
+    ASSERT_EQ(1u, dh_lux_debug_send_fake.call_count);
+    EXPECT_LT(0xFFFFu, dh_lux_debug_send_fake.arg2_val);
+}
+
+/* --------------------------------------------------------------- illuminance attribute */
+static uint16_t m_illum;
+static sl_zigbee_af_status_t write_attr(uint8_t, uint16_t, sl_zigbee_af_attribute_id_t id, uint8_t *d, uint8_t)
+{
+    if(ZCL_ILLUM_MEASURED_VALUE_ATTRIBUTE_ID == id) { m_illum = (uint16_t)(d[0] | (d[1] << 8)); }
+    return SL_ZIGBEE_ZCL_STATUS_SUCCESS;
+}
+
+static uint16_t illum_attribute(uint16_t mean_raw)
+{
+    light_sensor_info_t info = {};
+    info.mean_lux = mean_raw;
+    m_illum = 0x5555;
+    sl_zigbee_af_write_server_attribute_fake.custom_fake = write_attr;
+    execute_light_sensor_logic(&info);
+    return m_illum;
+}
+
+TEST_F(LightSensor, NoLuxIsReportedAsTooLowToMeasure)
+{
+    EXPECT_EQ(0u, illum_attribute(0));
+    get_present_network_fake.return_val = eDAINTREE_NWK;
+    EXPECT_EQ(0u, illum_attribute(2));                  // Daintree: below 3 is 0 lux
+}
+
+TEST_F(LightSensor, TheAttributeIs10000Log10LuxPlus1)
+{
+    EXPECT_EQ(25441u, illum_attribute(100));            // 100 x 3.5 = 350 lux, log10 = 2.5441
 }
 
 /* --------------------------------------------------------------- one master per group */
