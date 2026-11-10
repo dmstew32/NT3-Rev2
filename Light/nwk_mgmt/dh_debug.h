@@ -23,6 +23,16 @@
  * Setting the target: the same cluster and command, unicast or multicast to the
  * light, with the payload 0xAA (SINK_SHORT_ADDR), then the address, little endian.
  * Address 0xFFFE stops the debug messages.  The two payloads differ by length.
+ *
+ * Lux debug: with the same target, every light also sends ZCL_ADAPTIV_LUX_DEBUG_COMMAND_ID
+ * (0xD9) on the same cluster each time it averages 2 sensor readings, every 5 s.  Sent
+ * whether or not DH is running.  All little endian:
+ *
+ *   0  u32  lower 4 bytes of this light's EUI64
+ *   4  u32  uptime, seconds
+ *   8  u16  raw sensor reading, the last one, before the calibration factor
+ *  10  u16  raw sensor reading, the average of the last 2
+ *  12  u32  calibrated lux, from the raw average
  */
 
 #include <stdbool.h>
@@ -32,6 +42,7 @@
 #define DH_DEBUG_FIRST_NON_UNICAST (0xFFFCU)
 #define DH_DEBUG_PAYLOAD_LENGTH   (15U)
 #define DH_DEBUG_SET_TARGET_LENGTH (3U)
+#define DH_LUX_DEBUG_PAYLOAD_LENGTH (16U)
 #define DH_DEBUG_MODE_MASTER      (1U << 0)
 #define DH_DEBUG_MODE_DH_DISABLED (1U << 1)
 #define DH_DEBUG_CHECK_READINGS   (8U)    /* 8 x 2.5 s = 20 s */
@@ -42,8 +53,11 @@ uint16_t dh_debug_get_target(void);
 
 // True = handed to the stack
 bool dh_debug_send(uint16_t lux, uint16_t target_lux, uint8_t level, uint8_t mode_flags, uint8_t new_level);
+bool dh_lux_debug_send(uint16_t raw_last, uint16_t raw_average, uint32_t calibrated_lux);
 
 // Incoming ZCL_ADAPTIV_DEBUG_COMMAND_ID
 bool dh_debug_rx(sl_zigbee_af_cluster_command_t* cmd);
+// Incoming ZCL_ADAPTIV_LUX_DEBUG_COMMAND_ID
+bool dh_lux_debug_rx(sl_zigbee_af_cluster_command_t* cmd);
 
 #endif /* DH_DEBUG_H_ */

@@ -125,6 +125,56 @@ TEST_F(DhDebug, TheMessageBytes)
     EXPECT_EQ(expected, m_bytes);
 }
 
+TEST_F(DhDebug, TheLuxMessageBytes)
+{
+    dh_debug_set_target(0x1234);
+    ASSERT_TRUE(dh_lux_debug_send(0x0123, 0x0456, 0x00012345UL));
+
+    EXPECT_EQ(0x1234, m_to);
+    EXPECT_EQ(ZCL_ADAPTIV_DEBUG_CLUSTER_ID, m_aps.clusterId);
+    EXPECT_EQ(LIGHT_ENDPOINT, m_aps.sourceEndpoint);
+    EXPECT_EQ(LIGHT_ENDPOINT, m_aps.destinationEndpoint);
+
+    const std::vector<uint8_t> expected = {
+        (ZCL_CLUSTER_SPECIFIC_COMMAND | ZCL_FRAME_CONTROL_CLIENT_TO_SERVER |
+         ZCL_MANUFACTURER_SPECIFIC_MASK | ZCL_DISABLE_DEFAULT_RESPONSE_MASK),
+        0x74, 0x15, 0x5A, 0xD9,            // manufacturer 0x1574, sequence, command
+        0x11, 0x22, 0x33, 0x44,            // EUI64, lower 4 bytes
+        0x70, 0x11, 0x01, 0x00,            // uptime 70000 s
+        0x23, 0x01,                        // raw, last reading
+        0x56, 0x04,                        // raw, average
+        0x45, 0x23, 0x01, 0x00,            // calibrated lux
+    };
+    EXPECT_EQ(expected, m_bytes);
+    EXPECT_EQ(DH_LUX_DEBUG_PAYLOAD_LENGTH + 5u, m_bytes.size());
+}
+
+TEST_F(DhDebug, TheLuxMessageHasTheSameTargetRule)
+{
+    EXPECT_FALSE(dh_lux_debug_send(1, 1, 1));
+    for(uint16_t address : { 0xFFFCu, 0xFFFDu, 0xFFFEu, 0xFFFFu })
+    {
+        dh_debug_set_target(address);
+        EXPECT_FALSE(dh_lux_debug_send(1, 1, 1));
+    }
+    EXPECT_EQ(0u, sl_zigbee_af_send_unicast_fake.call_count);
+}
+
+TEST_F(DhDebug, ALuxMessageIsPrintedAndNeverChangesTheTarget)
+{
+    dh_debug_set_target(0x1234);
+    std::vector<uint8_t> bytes(5, 0);
+    std::vector<uint8_t> payload = { 0xAA, 0x22, 0x33, 0x44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    sl_zigbee_af_cluster_command_t cmd = {};
+    cmd.buffer = bytes.data();
+    cmd.bufLen = (uint16_t)bytes.size();
+    cmd.payloadStartIndex = 5;
+    EXPECT_TRUE(dh_lux_debug_rx(&cmd));
+    EXPECT_EQ(0x1234, dh_debug_get_target());
+    EXPECT_EQ(1u, sl_zigbee_app_debug_print_fake.call_count);
+}
+
 TEST_F(DhDebug, TheDisabledFlagIsBit1)
 {
     EXPECT_EQ(0x02, DH_DEBUG_MODE_DH_DISABLED);

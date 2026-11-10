@@ -53,6 +53,8 @@ static uint8_t debug_readings = 0U;
 static uint8_t debug_checks = 0U;
 static uint8_t debug_last_level = 0U;
 static uint16_t debug_previous_reading = 0U;
+static bool lux_debug_have_first = false;
+static uint16_t lux_debug_first_reading = 0U;
 static light_sensor_data_t light_sensor_data;
 static uint16_t dhs_inhibit_bits = 0;
 
@@ -179,6 +181,8 @@ void light_sensor_init(void)
   debug_checks = 0U;
   debug_last_level = 0U;
   debug_previous_reading = 0U;
+  lux_debug_have_first = false;
+  lux_debug_first_reading = 0U;
   dhs_reading_disturbed = false;
 
   suspend_light_sensor_control(LIGHT_SENSOR_UPDATE_AVERAGE_MS);
@@ -319,6 +323,23 @@ static void dhs_debug_tick(uint16_t reading)
   }
 }
 
+// Lux packet: every 2 readings (5 s), the raw readings and the calibrated lux of their
+// average, whether or not DH is running.  Not sent without a target; not retried.
+static void lux_debug_tick(uint16_t reading)
+{
+  if(!lux_debug_have_first)
+  {
+     lux_debug_first_reading = reading;
+     lux_debug_have_first = true;
+     return;
+  }
+  lux_debug_have_first = false;
+
+  uint32_t average = ((uint32_t)lux_debug_first_reading + (uint32_t)reading) / DH_READINGS_PER_AVERAGE;
+
+  (void)dh_lux_debug_send(reading, (uint16_t)average, dh_calibrated_lux(average));
+}
+
 // Every reading from the sensor, see hal_light_sensor.c
 void light_sensor_on_reading(uint16_t reading)
 {
@@ -348,6 +369,7 @@ void light_sensor_on_reading(uint16_t reading)
   dh_master_on_reading(&dh_master, &in);
 
   dhs_debug_tick(reading);
+  lux_debug_tick(reading);
 }
 
 /****************************************************************************
@@ -390,7 +412,8 @@ else
   light_sensor_data.mean_lux = _lux;
 
   // Generate reported lux value, save in attribute, For Daintree only!!
-  uint16_t reported_lux = (uint16_t)(10000.0*log10f((float)_lux))+1; // per spec
+  // ZCL: 0 = too low to be measured.  log10(0) is -infinity, which can't be converted.
+  uint16_t reported_lux = (0U == _lux) ? 0U : (uint16_t)(10000.0*log10f((float)_lux))+1; // per spec
   write_light_sensor_attribute(ZCL_ILLUM_MEASURED_VALUE_ATTRIBUTE_ID, reported_lux);
 
   #if (1 <= LIGHT_SENSOR_PRINT)

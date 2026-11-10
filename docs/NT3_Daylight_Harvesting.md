@@ -293,6 +293,25 @@ to. It is not saved, so it returns to 0xFFFE after a restart.
 multicast, with the 3-byte payload `0xAA`, then the address, little-endian. Address
 0xFFFE stops the messages. A light that receives a 15-byte data message prints it.
 
+### Lux packet
+
+With the same target set, `dh_lux_debug_send()` also sends a second unicast every time
+`lux_debug_tick()` (`light_sensor.c`) averages 2 sensor readings, which is every 5 s. It
+is sent whether or not DH is running (any network, off, suspended, not master). When it
+can't be sent, it isn't retried: the next one is 5 s later.
+
+**Frame:** the same as above, except command 0xD9 (`ZCL_ADAPTIV_LUX_DEBUG_COMMAND_ID`).
+
+| Byte | Size | Content |
+|---|---|---|
+| 0 | u32 | Lower 4 bytes of this light's EUI64 |
+| 4 | u32 | Uptime, seconds |
+| 8 | u16 | Raw sensor reading, the last one, before `CALIBRATED_LUX_FACTOR` |
+| 10 | u16 | Raw sensor reading, the average of the last 2 |
+| 12 | u32 | Calibrated lux, from the raw average (u32: raw × 3.5 can pass 65535) |
+
+A light that receives a 16-byte message with command 0xD9 prints it.
+
 ---
 
 ## 11. Network traffic

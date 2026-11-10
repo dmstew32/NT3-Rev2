@@ -1,6 +1,7 @@
 GNU ARM v12.2.1 - Default/
 GNU ARM v*/
 cmake_gcc/
+releases/
 # Build outputs
 *.axf
 *.out
