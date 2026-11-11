@@ -466,6 +466,36 @@ TEST_F(OccGroup, ShortTimeoutsScaleTheWindow)
     EXPECT_NEAR(3, out[0].time_s, 1);
 }
 
+// 30 s timeout: window = 7.5 s.  A refresh sent with 7.0-7.5 s left goes out as
+// 8 s (rounded up), just outside the window.  Syncing to it must still count as
+// this period's refresh, or every light re-arms its refresh 0.5 s later and the
+// group keeps resetting itself to 8 s.
+TEST_F(OccGroup, RefreshRoundedUpPastAFractionalWindowIsStillThisPeriodsRefresh)
+{
+    l.dim_ms = 30000; l.off_ms = 30000;
+    occ_group_init(&l.g, &l.ops, now);
+    backoff_fraction = 100;                            // ours would go 5 s into the window
+    uint32_t start = now;
+    run_to(start + 30000 - 7400);                      // 7.4 s left: in the window, ours pending
+    occ_group_rx_keepalive(&l.g, now, 8, OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH);
+    EXPECT_EQ(8000u, occ_group_remaining_ms(&l.g, now));
+    run_for(7900);                                     // up to just before expiry
+    EXPECT_TRUE(out.empty());                          // no refresh of our own
+}
+
+TEST_F(OccGroup, SyncingToATimeWellOutsideTheWindowStillRefreshesLater)
+{
+    l.dim_ms = 30000; l.off_ms = 30000;
+    occ_group_init(&l.g, &l.ops, now);
+    backoff_fraction = 0;
+    run_for(10000);                                    // 20 s left
+    occ_group_rx_keepalive(&l.g, now, 19, OCC_GROUP_ON, OCC_KEEPALIVE_REFRESH);   // within the margin: sync
+    EXPECT_EQ(19000u, occ_group_remaining_ms(&l.g, now));
+    run_for(12000);                                    // 7 s left: in the window
+    ASSERT_EQ(1u, out.size());
+    EXPECT_EQ(OCC_KEEPALIVE_REFRESH, out[0].reason);
+}
+
 TEST_F(OccGroup, WorksAcrossTheMillisecondClockWrap)
 {
     now = 0xFFFFFFFFu - 10 * MIN_MS;
@@ -885,6 +915,30 @@ TEST(OccGroupSim, ShortTestTimeoutsDoNotRefreshContinuously)
     printf("      30 s timeout, one occupied light, 10 min: %zu multicasts\n", s.all_sent.size());
     // A cycle is only 20-30 s here, so refresh + reply repeat about every 25 s
     EXPECT_LE(s.all_sent.size(), 100u);
+}
+
+// Field capture (30 s timeout, 20 lights, vacant): six refreshes of "8 s" in a
+// row, each one re-arming every light's refresh (before the fix: ~7 per period,
+// worst 21, and some groups never dimmed).  The 7.5 s window only spreads 20
+// lights' backoffs over 0-5 s, so two often go out before hearing each other:
+// up to ~2 per period is expected, a chain is not.
+TEST(OccGroupSim, FractionalRefreshWindowDoesNotChainRefreshes)
+{
+    int refresh = 0, runs = 20, worst = 0;
+    for(int seed = 1; seed <= runs; seed++)
+    {
+        Sim s(20, 650 + seed, 30000, 30000);           // window = 7.5 s
+        uint32_t start = s.now;
+        s.run_to(start + 30000 + 6000);                // through the first dim
+        int n = s.count(true, OCC_KEEPALIVE_REFRESH);
+        refresh += n;
+        worst = std::max(worst, n);
+        EXPECT_TRUE(s.all_in(OCC_GROUP_MID)) << "seed " << seed;
+    }
+    printf("      20 lights, 30 s timeout, vacant: %.2f refreshes per period, worst %d\n",
+           (double)refresh / runs, worst);
+    EXPECT_LE(refresh, runs * 2);
+    EXPECT_LE(worst, 3);
 }
 
 /* --------------------------------------------------------------- busy network */
