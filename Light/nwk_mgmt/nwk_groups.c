@@ -39,9 +39,11 @@ uint8_t update_bindingTable_address(void)
   {
      if(SL_STATUS_OK == sl_zigbee_get_binding(i, &result))
      {
+        // Skip, don't stop: deleting a binding leaves an unused hole and
+        // entries after it are still valid
         if(SL_ZIGBEE_UNUSED_BINDING == result.type)
         {
-           break;
+           continue;
         }
 
         #ifdef PRINT_BINDING
@@ -66,15 +68,18 @@ uint8_t update_bindingTable_address(void)
         sl_zigbee_app_debug_println(" ");
         #endif  // PRINT_BINDING
 
-        // Save multicast address
+        // Save multicast address.  Packed at the front of local_binding_table,
+        // so get_multicast_info(0 .. n-1) returns only the multicast entries,
+        // whatever their index in the stack's binding table.
         if(SL_ZIGBEE_MULTICAST_BINDING == result.type)
         {
-            _n_multicast_group_addr++;
-           local_binding_table[i].group_address = GET_16_FROM_ARRAY(result.identifier, 0);
-           local_binding_table[i].dst_ep = result.local;
+           device_binding_info_t *entry = &local_binding_table[_n_multicast_group_addr];
+
+           entry->group_address = GET_16_FROM_ARRAY(result.identifier, 0);
+           entry->dst_ep = result.local;
+           _n_multicast_group_addr++;
            sl_zigbee_app_debug_println("Multicast-Tbl[%d] grp-id:0x%04X  ep:%d  n:%d",
-            i, local_binding_table[i].group_address, local_binding_table[i].dst_ep,
-            _n_multicast_group_addr);
+            i, entry->group_address, entry->dst_ep, _n_multicast_group_addr);
         }
      }
   }
