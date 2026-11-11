@@ -594,6 +594,14 @@ static bool sensor_debounced(void)
   }
 }
 
+// The light is at mid because occupancy dimmed it (Adaptiv group).  The on level
+// is held at the wake level then (keep_on_level_at_wake_level()), so an off
+// command must not save mid over it: the next on restores the wake level.
+bool occ_dimmed_to_mid(void)
+{
+  return((eADAPTIV_NWK == get_present_network()) && (OCC_GROUP_MID == occ_group_state(&occ_group)));
+}
+
 bool is_occ_mid_or_lower(void)
 {
   if(eADAPTIV_NWK == get_present_network())

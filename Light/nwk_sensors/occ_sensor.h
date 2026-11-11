@@ -42,6 +42,8 @@ void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd);
 void occ_sensor_set_switch_level(uint8_t level);
 
 bool is_occ_mid_or_lower(void);
+// At mid from an occupancy dim: an off command must not save mid as the on level
+bool occ_dimmed_to_mid(void);
 void spew_occ_state(void);
 
 #endif /* NWK_MGMT_OCC_SENSOR_H_ */
