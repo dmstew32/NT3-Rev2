@@ -851,21 +851,21 @@ void sl_zigbee_af_network_steering_finish_steering_event_handler(sl_zigbee_af_ev
     // Broadcast permit join to extend the network.
     // We are done!
 #ifdef ADAPTIV_LIGHT
-    if(eADAPTIV_NWK != get_present_network())
-    {
-       status = sl_zigbee_af_permit_join(SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_COMMISSIONING_TIME_S,
+    // The coordinator manages permit join: a light never opens the network
+    // after it joins.  Always finish steering, so the complete callback runs
+    // and steering can start again later.
+    (void)status;
+    sl_zigbee_af_core_println("%s: %s",
+                              PLUGIN_NAME,
+                              "Joined, no permit join broadcast");
+    cleanupAndStop(SL_STATUS_OK);
 #else  // ADAPTIV_LIGHT
     status = sl_zigbee_af_permit_join(SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_COMMISSIONING_TIME_S,
-#endif // ADAPTIV_LIGHT
                                       true); // Broadcast permit join?
-       sl_zigbee_af_core_println("%s: %s: 0x%02X",
+    sl_zigbee_af_core_println("%s: %s: 0x%02X",
                               PLUGIN_NAME,
                               "Broadcasting permit join",
                               status);
-#ifdef ADAPTIV_LIGHT
-       cleanupAndStop(status);
-    }
-#else  // ADAPTIV_LIGHT
     cleanupAndStop(status);
 #endif // ADAPTIV_LIGHT
     sl_zigbee_af_remove_from_current_app_tasks(SL_ZIGBEE_AF_WAITING_FOR_TC_KEY_UPDATE);

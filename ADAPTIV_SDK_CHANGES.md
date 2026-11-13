@@ -25,7 +25,7 @@ changes: `grep -rn "ADAPTIV_LIGHT" simplicity_sdk_2025.6.3`.
 | 65 | protocol/zigbee/app/framework/plugin/level-control/level-control.c (incl. switch level for occupancy, `note_switch_level()`; Daintree level range 1..255, level 0 = off; a received level command disables daylight harvesting) |
 | 20 | protocol/zigbee/app/framework/plugin/on-off/on-off.c (a received on/off command disables daylight harvesting; off/toggle-off saves the present level as the on level, except at mid from an occupancy dim, `occ_dimmed_to_mid()`, so the next on restores the wake level) |
 | 17 | protocol/zigbee/app/framework/plugin/ota-client/ota-client.c (Adaptiv network: first OTA server search after network up is random over 15 min .. the server discovery period, so lights powered up together don't search at once) |
-| 15 | protocol/zigbee/app/framework/plugin/network-steering/network-steering-v2.c |
+| 14 | protocol/zigbee/app/framework/plugin/network-steering/network-steering-v2.c (no permit join broadcast after joining, the coordinator manages permit join; steering always finishes with `cleanupAndStop(SL_STATUS_OK)`) |
 | 12 | protocol/zigbee/app/framework/plugin/scenes/scenes.c (a received scene recall disables daylight harvesting) |
 | 7 | protocol/zigbee/app/framework/plugin/groups-server/groups-server.c (a received Add Group calls `adaptiv_group_added_by_command()`: no light level change; `manually_add_group()` for Adaptiv commissioning still calls `adaptiv_group_added(true)`, which goes to max) |
 | 7 | protocol/zigbee/app/framework/plugin/identify/identify.c |

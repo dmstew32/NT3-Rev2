@@ -69,11 +69,21 @@
 #endif // SL_CATALOG_LED0_PRESENT
 
 
-#define ATTEMPT_TO_JOIN_PERIOD_MS  (10UL*1000UL)    // 10 secs
-#define ATTEMPT_TO_JOIN_LONG_MS    (120UL*60UL*1000UL)  // 2 hrs
-
-#define ATTEMPT_TO_JOIN_COUNT      (ATTEMPT_TO_JOIN_LONG_MS/ATTEMPT_TO_JOIN_PERIOD_MS)
+#define ATTEMPT_TO_JOIN_PERIOD_MS  (10UL*1000UL)    // 10 secs, first attempt after boot
 #define JOINED_PERIOD_MS           (10UL*60UL*1000UL)
+
+// Join retry backoff: the delay before the next steering attempt grows with
+// the number of failed attempts in a row, so unjoined lights in a large network
+// don't keep the channel busy with beacon requests.  Never more than 30 secs.
+#define JOIN_RETRY_FAST_COUNT      (5U)     // failures 1..5:   2 - 8 secs
+#define JOIN_RETRY_MEDIUM_COUNT    (20U)    // failures 6..20:  8 - 16 secs
+                                            // failures 21+:    15 - 30 secs
+#define JOIN_RETRY_FAST_MIN_MS     (2UL*1000UL)
+#define JOIN_RETRY_FAST_MAX_MS     (8UL*1000UL)
+#define JOIN_RETRY_MEDIUM_MIN_MS   (8UL*1000UL)
+#define JOIN_RETRY_MEDIUM_MAX_MS   (16UL*1000UL)
+#define JOIN_RETRY_SLOW_MIN_MS     (15UL*1000UL)
+#define JOIN_RETRY_SLOW_MAX_MS     (30UL*1000UL)
 #define COMMISSIONING_WAIT_FOR_RESET_MS (1000UL)   // check again while a factory reset runs
 
 #define PRINT_NWK_PARAMS
@@ -89,6 +99,7 @@
 static sl_zigbee_af_event_t commissioning_event;
 static sl_zigbee_af_event_t which_nwk_we_on_event;
 static sl_zigbee_af_event_t finding_and_binding_event;
+static uint8_t join_fail_count = 0;   // failed join attempts in a row, see next_join_retry_ms()
 
 static void spew_nwkParams(sl_zigbee_network_parameters_t *nwkParams);
 
@@ -224,26 +235,32 @@ static void commissioning_event_handler(sl_zigbee_af_event_t *event)
   }
 
   // Next attempt to join done in sl_zigbee_af_network_steering_complete_cb()
-#if 0
-  // Get here in all cases, joined or not joined
-  // Determine how often to look for a network
-  event_handler_count++;
-  if(SL_ZIGBEE_JOINED_NETWORK == nwk_state)
+}
+
+// Delay before the next join attempt, from the number of failed attempts in a
+// row (see JOIN_RETRY_*).  Counts this failure.
+static uint32_t next_join_retry_ms(void)
+{
+  uint32_t delay_ms;
+
+  if(join_fail_count < JOIN_RETRY_FAST_COUNT)
   {
-     sl_zigbee_af_event_set_delay_ms(&commissioning_event, JOINED_PERIOD_MS);
-     set_app_flags_nonvol(B_SWITCH_NWK, 0);
+     delay_ms = get_random_number(JOIN_RETRY_FAST_MAX_MS, JOIN_RETRY_FAST_MIN_MS);
   }
-  else if(ATTEMPT_TO_JOIN_COUNT <= event_handler_count)
+  else if(join_fail_count < JOIN_RETRY_MEDIUM_COUNT)
   {
-     sl_zigbee_af_event_set_delay_ms(&commissioning_event, ATTEMPT_TO_JOIN_LONG_MS);
-     event_handler_count = ATTEMPT_TO_JOIN_COUNT;
-     set_app_flags_nonvol(B_SWITCH_NWK, 0);
+     delay_ms = get_random_number(JOIN_RETRY_MEDIUM_MAX_MS, JOIN_RETRY_MEDIUM_MIN_MS);
   }
   else
   {
-     sl_zigbee_af_event_set_delay_ms(&commissioning_event, ATTEMPT_TO_JOIN_PERIOD_MS);
+     delay_ms = get_random_number(JOIN_RETRY_SLOW_MAX_MS, JOIN_RETRY_SLOW_MIN_MS);
   }
-#endif
+
+  if(join_fail_count < JOIN_RETRY_MEDIUM_COUNT)
+  {
+     join_fail_count++;   // stops counting once in the slow range
+  }
+  return(delay_ms);
 }
 
 #ifdef PRINT_NWK_PARAMS
@@ -323,6 +340,13 @@ void which_nwk_we_on_handler(void)
 //----------------------
 // Implemented Callbacks
 
+bool sl_token_assert_on_cache_overflow_callback(void)
+{
+  // Return true here means assertion when the NVM3 cache overflows
+  // Customers can strongly re-define this callback to fit their purpose.
+  return false;
+}
+
 /** @brief Stack Status
  *
  * This function is called by the application framework from the stack status
@@ -338,7 +362,8 @@ void sl_zigbee_af_stack_status_cb(sl_status_t status)
      sl_zigbee_app_debug_println("sl_zigbee_af_stack_status_cb  SL_STATUS_NETWORK_DOWN");
      // Set up to periodically look for nwk   JGR
      sl_zigbee_af_event_set_inactive(&commissioning_event);
-     sl_zigbee_af_event_set_delay_ms(&commissioning_event, get_random_number(8000UL, 300UL));
+     sl_zigbee_af_event_set_delay_ms(&commissioning_event,
+                                     get_random_number(JOIN_RETRY_FAST_MAX_MS, JOIN_RETRY_FAST_MIN_MS));
      sl_zigbee_af_event_set_inactive(&finding_and_binding_event);
      nwk_down_clean_up();
      set_present_network(eNO_NWK);
@@ -346,6 +371,7 @@ void sl_zigbee_af_stack_status_cb(sl_status_t status)
   else if (status == SL_STATUS_NETWORK_UP)
   {
      sl_zigbee_app_debug_println("sl_zigbee_af_stack_status_cb  SL_STATUS_NETWORK_UP");
+     join_fail_count = 0;   // if the network is lost later, retry fast again
      if((eNO_NWK == get_present_network()) || (eSTAND_ALONE == get_present_network()))
      {
         // Just joined a nwk, set to normal defaults
@@ -459,39 +485,44 @@ void sl_zigbee_af_network_steering_complete_cb(sl_status_t status,
   (void)totalBeacons;
   (void)joinAttempts;
   (void)finalState;
-  uint32_t next_time = get_random_number(8000UL, 300UL);
+  uint32_t next_time;
+  char error[16] = {0};
 
-  if(true)
+  switch((uint32_t)status)
   {
-     char error[16] = {0};
-     switch((uint32_t)status)
-     {
-        case SL_STATUS_OK:
-           sprintf(error, "JOIN GOOD");
-           next_time = JOINED_PERIOD_MS;
-           set_app_flags_nonvol(B_SWITCH_NWK, 0);
-           break;
-        case SL_STATUS_NETWORK_UP:
-           sprintf(error, "NETWORK_UP");
-           next_time = JOINED_PERIOD_MS;
-           set_app_flags_nonvol(B_SWITCH_NWK, 0);
-           break;
-        case SL_STATUS_NETWORK_DOWN:
-           sprintf(error, "NWK_DOWN");
-           break;
-        case SL_STATUS_NOT_JOINED:
-           sprintf(error, "NOT JOINED");
-           break;
-        case SL_STATUS_NO_BEACONS:
-           sprintf(error, "NO BEACON");
-           break;
-        default:
-           sprintf(error, "UNKNOWN");
-           break;
-     }
-     sl_zigbee_app_debug_println("sl_zigbee_af_network_steering_complete_cb: %s  [0x%02X]   <%d>", error, status, get_time_ms() );
+     case SL_STATUS_OK:
+        sprintf(error, "JOIN GOOD");
+        break;
+     case SL_STATUS_NETWORK_UP:
+        sprintf(error, "NETWORK_UP");
+        break;
+     case SL_STATUS_NETWORK_DOWN:
+        sprintf(error, "NWK_DOWN");
+        break;
+     case SL_STATUS_NOT_JOINED:
+        sprintf(error, "NOT JOINED");
+        break;
+     case SL_STATUS_NO_BEACONS:
+        sprintf(error, "NO BEACON");
+        break;
+     default:
+        sprintf(error, "UNKNOWN");
+        break;
   }
-  //sl_zigbee_app_debug_println("Delay %d", next_time);
+
+  if((SL_STATUS_OK == status) || (SL_STATUS_NETWORK_UP == status))
+  {
+     join_fail_count = 0;
+     next_time = JOINED_PERIOD_MS;
+     set_app_flags_nonvol(B_SWITCH_NWK, 0);
+  }
+  else
+  {
+     next_time = next_join_retry_ms();
+  }
+
+  sl_zigbee_app_debug_println("sl_zigbee_af_network_steering_complete_cb: %s  [0x%02X]  fails:%d  next:%dmS   <%d>",
+                              error, status, join_fail_count, next_time, get_time_ms());
 
  sl_zigbee_af_event_set_delay_ms(&commissioning_event, next_time);
 
