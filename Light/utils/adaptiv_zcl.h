@@ -50,6 +50,12 @@ typedef enum
     AUTOCOMM_OPTION_PERMIT_JOIN                 = (1 << 1),
 } autocomm_session_options_t;
 
+typedef enum
+{
+    FACT_RESET_OPTION_NONE = 0,
+    FACT_RESET_OPTION_NOT_GROUPED = (1 << 0),
+} fact_reset_option_t;
+
 
 /**
  * ADAPTIV CONFIG CLUSTER DEFINITIONS
@@ -71,6 +77,7 @@ enum
 enum
 {
     ZCL_MFG_ADAPTIV_CONFIG_RESET_CMD_ID = 0,
+    ZCL_MFG_ADAPTIV_CONFIG_SWITCH_GROUP_ID = 1,
 };
 
 typedef enum

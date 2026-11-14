@@ -7,9 +7,9 @@
 
 /// These version fields are used in the Zigbee Basic attributes
 //  and other areas in the firmware.
-#define APP_VERSION_MAJOR 8
+#define APP_VERSION_MAJOR 9
 #define APP_VERSION_MINOR 1
-#define APP_VERSION_BUILD 4
+#define APP_VERSION_BUILD 5
 
 
 // The APP_VERSION_STR_LEN must be properly maintained to represent the length
