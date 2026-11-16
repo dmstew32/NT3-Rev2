@@ -101,6 +101,14 @@ static sl_zigbee_af_event_t which_nwk_we_on_event;
 static sl_zigbee_af_event_t finding_and_binding_event;
 static uint8_t join_fail_count = 0;   // failed join attempts in a row, see next_join_retry_ms()
 
+// NETWORK_DOWN for good (left the network), not a rejoin on the same network.
+// Same test the framework uses in sl_zigbee_af_stack_down().
+static bool network_really_down(void)
+{
+  return((false == sl_zigbee_is_performing_rejoin()) &&
+         (SL_ZIGBEE_NO_NETWORK == sl_zigbee_network_state()));
+}
+
 static void spew_nwkParams(sl_zigbee_network_parameters_t *nwkParams);
 
 //---------------
@@ -110,6 +118,15 @@ static void commissioning_event_handler(sl_zigbee_af_event_t *event)
 {
   sl_zigbee_network_status_t nwk_state = sl_zigbee_af_network_state();
   (void)event;
+
+  if((SL_ZIGBEE_JOINED_NETWORK != nwk_state) && sl_zigbee_is_performing_rejoin())
+  {
+     // Rejoining the same network: don't start steering, and don't set eNO_NWK
+     // below (NETWORK_UP would then reset all light settings to defaults).
+     // Check again later, in case the rejoin doesn't bring the network back.
+     sl_zigbee_af_event_set_delay_ms(&commissioning_event, JOINED_PERIOD_MS);
+     return;
+  }
 
   if((SL_ZIGBEE_JOINED_NETWORK != nwk_state) && factory_reset_in_progress())
   {
@@ -359,6 +376,16 @@ void sl_zigbee_af_stack_status_cb(sl_status_t status)
   // Note, the ZLL state is automatically updated by the stack and the plugin.
   if (status == SL_STATUS_NETWORK_DOWN)
   {
+     if(!network_really_down())
+     {
+        // Leave with rejoin (or other rejoin): the stack comes back on the same
+        // network, NETWORK_UP follows.  Keep groups, bindings and settings.
+        // (commissioning_event_handler() also waits while rejoining.)
+        sl_zigbee_app_debug_println("sl_zigbee_af_stack_status_cb  SL_STATUS_NETWORK_DOWN, rejoining  state %d",
+                                    sl_zigbee_network_state());
+        return;
+     }
+
      sl_zigbee_app_debug_println("sl_zigbee_af_stack_status_cb  SL_STATUS_NETWORK_DOWN");
      // Set up to periodically look for nwk   JGR
      sl_zigbee_af_event_set_inactive(&commissioning_event);

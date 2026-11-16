@@ -513,6 +513,35 @@ static void adaptiv_sample(bool occupied)
   }
 }
 
+// The light was just put on at the max trim level (group config change, Adaptiv
+// network): the group state goes to ON with a full timer, the same as an external
+// on cmd, whatever it was (OFF, MID, or ON part way through the timer).  Needed
+// because a light that stays at mid when unoccupied (min level not 0, EM mode)
+// is not seen as turned on by adaptiv_off_sample().  Sends nothing: a group
+// config change goes to every light in the group.
+void occ_sensor_on_at_max(void)
+{
+  uint32_t now_ms = get_time_ms();
+
+  if((eADAPTIV_NWK != get_present_network()) || !occupancy_sensor_initialized ||
+     !device_is_in_a_group() || (0 == get_unoccupied_delay()) ||
+     is_app_flags_nonvol_set(B_DISABLE_OCC_SENSOR))
+  {
+     return;   // occupancy is not controlling this light
+  }
+
+  occ_group_external_on(&occ_group, now_ms);
+  occupancy_sensor_info.time_stamp_unoccupied_to_occupied = now_ms;
+  occupancy_sensor_info.time_stamp_occupied_to_unoccupied = now_ms;
+  set_occupied_attribute(true);
+  if(!is_app_flags_nonvol_set(B_EM_MODE))
+  {
+     clear_off_from_switch();
+     clear_on_from_switch();
+  }
+  sl_zigbee_app_debug_println("OCC on at max, timer restarted   <%d>", now_ms);
+}
+
 // RX keepalive / level change multicast from another light in the group
 void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd)
 {

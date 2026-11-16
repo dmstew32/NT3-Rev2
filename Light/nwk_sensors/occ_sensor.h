@@ -40,6 +40,8 @@ bool write_occupancy_sensor_attribute( sl_zigbee_af_attribute_id_t attributeID, 
 void occ_sensor_rx_group_cmd(sl_zigbee_af_cluster_command_t *cmd);
 // A switch (network level command) left the light at this level: occupancy wakes to it
 void occ_sensor_set_switch_level(uint8_t level);
+// The light was put on at the max trim level (group config change): ON, full timer
+void occ_sensor_on_at_max(void);
 
 bool is_occ_mid_or_lower(void);
 // At mid from an occupancy dim: an off command must not save mid as the on level

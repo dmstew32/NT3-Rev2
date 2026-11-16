@@ -31,6 +31,7 @@ static uint16_t dim_cycles = 0;
 static uint16_t dim_period_Dsecs = 10;
 static uint8_t dim_original_level = DEFAULT_MAX_LIGHT_LEVEL;
 static bool dim_original_on = true;
+static bool dim_end_at_max = false;   // see dim_lights_up_down_end_at_max()
 
 void dim_lights_up_down_handler(void);
 
@@ -70,6 +71,14 @@ void dim_lights_up_down_handler(void)
      sl_zigbee_af_event_set_delay_ms(&dim_lights_up_down_event,
                                  ((uint32_t)dim_period_Dsecs*100UL) + 250UL);
   }
+  else if(dim_end_at_max)
+  {
+     // Group config change: the light goes to the max trim level and the
+     // occupancy timer starts again, whatever the light was doing before
+     dim_end_at_max = false;
+     move_to_level_onoff(get_max_light_level(), 0);
+     occ_sensor_on_at_max();
+  }
   else if(dim_original_on)
   {
      // Back to the level before the flashes (limited to the max level by the move)
@@ -98,12 +107,25 @@ void dim_lights_up_down(uint16_t cycles, uint16_t ramp_Dsecs)
   {
      // Turn off flashing: commissioning is over, the light goes to max
      sl_zigbee_af_event_set_inactive(&dim_lights_up_down_event);
+     dim_end_at_max = false;
      move_to_level_onoff(get_max_light_level(), 0);
 
   }
   else
   {
      sl_zigbee_app_debug_println("Warning:dim_lights_up_down already active");
+  }
+}
+
+// Same flashes, but at the end the light goes to the max trim level and the
+// occupancy timer starts again (group config changes), instead of going back
+// to the level before the flashes.  Also applies to flashes already running.
+void dim_lights_up_down_end_at_max(uint16_t cycles, uint16_t ramp_Dsecs)
+{
+  dim_lights_up_down(cycles, ramp_Dsecs);
+  if(sl_zigbee_af_event_is_scheduled(&dim_lights_up_down_event))
+  {
+     dim_end_at_max = true;
   }
 }
 

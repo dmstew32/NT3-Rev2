@@ -10,6 +10,8 @@ bool light_level_active(void);
 void power_on_set_light_level(void);
 uint16_t read_light_level_attribute(sl_zigbee_af_attribute_id_t attributeID);
 void dim_lights_up_down(uint16_t cycles, uint16_t dim_time_Dsecs);
+// Flashes, then the max trim level and a fresh occupancy timer (group config changes)
+void dim_lights_up_down_end_at_max(uint16_t cycles, uint16_t dim_time_Dsecs);
 bool are_lights_dimming_up_dowm(void);
 
 void init_light_parameters(void);

@@ -792,8 +792,14 @@ sl_status_t sl_zigbee_af_network_steering_start(void)
       // The test harness needs to set up the correct link key
       sl_zigbee_af_event_set_active(&sl_zigbee_af_test_harness_z3_open_network_event);
 #endif
+#ifdef ADAPTIV_LIGHT
+      // The coordinator manages permit join: a light never opens the network,
+      // even if steering is started while joined (or rejoining)
+      status = SL_STATUS_INVALID_STATE;
+#else  // ADAPTIV_LIGHT
       status = sl_zigbee_af_permit_join(SL_ZIGBEE_AF_PLUGIN_NETWORK_STEERING_COMMISSIONING_TIME_S,
                                         true); // Broadcast permit join?
+#endif // ADAPTIV_LIGHT
     }
   } else {
     sl_zigbee_af_core_println("%s is already in progress",
