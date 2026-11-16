@@ -53,6 +53,7 @@
 #include "rx_zcl_handler.h"
 #include "rx_zdo_handler.h"
 #include "tx_queue.h"
+#include "em_chip.h"
 
 #if defined(SL_CATALOG_LED0_PRESENT)
 #include "sl_led.h"
@@ -84,6 +85,16 @@
 #define JOIN_RETRY_MEDIUM_MAX_MS   (16UL*1000UL)
 #define JOIN_RETRY_SLOW_MIN_MS     (15UL*1000UL)
 #define JOIN_RETRY_SLOW_MAX_MS     (30UL*1000UL)
+
+// A steering pass normally ends with sl_zigbee_af_network_steering_complete_cb(),
+// which schedules the next attempt.  If the stack gets stuck (no callback), the
+// commissioning event runs again after this long anyway.
+#define JOIN_STEERING_TIMEOUT_MS   (60UL*1000UL)
+
+// Recovery when the stack is stuck in SL_ZIGBEE_JOINING_NETWORK (seen on the
+// Twitch): count join attempts that find it stuck, leave at 20, reboot at 24.
+#define STUCK_JOINING_LEAVE_COUNT  (20U)
+#define STUCK_JOINING_RESET_COUNT  (24U)
 #define COMMISSIONING_WAIT_FOR_RESET_MS (1000UL)   // check again while a factory reset runs
 
 #define PRINT_NWK_PARAMS
@@ -100,6 +111,7 @@ static sl_zigbee_af_event_t commissioning_event;
 static sl_zigbee_af_event_t which_nwk_we_on_event;
 static sl_zigbee_af_event_t finding_and_binding_event;
 static uint8_t join_fail_count = 0;   // failed join attempts in a row, see next_join_retry_ms()
+static uint8_t stuck_joining_count = 0;   // join attempts in a row that found the stack stuck joining
 
 // NETWORK_DOWN for good (left the network), not a rejoin on the same network.
 // Same test the framework uses in sl_zigbee_af_stack_down().
@@ -110,6 +122,8 @@ static bool network_really_down(void)
 }
 
 static void spew_nwkParams(sl_zigbee_network_parameters_t *nwkParams);
+static uint32_t next_join_retry_ms(void);
+static void stuck_joining_recovery(void);
 
 //---------------
 // Event handlers
@@ -153,10 +167,23 @@ static void commissioning_event_handler(sl_zigbee_af_event_t *event)
   }
   else if(!is_app_flags_nonvol_set(B_SWITCH_NWK))
   {
+     if(SL_ZIGBEE_JOINING_NETWORK == nwk_state)
+     {
+        // Stuck joining: steering can't start (and no complete callback comes),
+        // so count it as a failed attempt and schedule the next one here
+        stuck_joining_recovery();
+        sl_zigbee_af_event_set_delay_ms(&commissioning_event, next_join_retry_ms());
+        return;
+     }
+     stuck_joining_count = 0;
+
      // NOT JOINED and use normal scan/join
      sl_zigbee_app_debug_println("\ncommissioning_event_handler NOT JOINED.....STARTING JOIN   <%d>", get_time_ms());
      sl_zigbee_af_network_steering_autostart();
      set_present_network(eNO_NWK);
+
+     // The steering complete callback replaces this with the next attempt's delay
+     sl_zigbee_af_event_set_delay_ms(&commissioning_event, JOIN_STEERING_TIMEOUT_MS);
   }
   else if(is_app_flags_nonvol_set(B_SWITCH_NWK))
   {
@@ -252,6 +279,29 @@ static void commissioning_event_handler(sl_zigbee_af_event_t *event)
   }
 
   // Next attempt to join done in sl_zigbee_af_network_steering_complete_cb()
+}
+
+// The stack is stuck in SL_ZIGBEE_JOINING_NETWORK at a join attempt.  Some API
+// error can leave it there (seen on the Twitch).  The state is not saved, so a
+// leave, or else a reboot, gets the light joining again.
+static void stuck_joining_recovery(void)
+{
+  if(stuck_joining_count < 0xFF)
+  {
+     stuck_joining_count++;
+  }
+  sl_zigbee_app_debug_println("Stuck joining  count %d   <%d>", stuck_joining_count, get_time_ms());
+
+  if(STUCK_JOINING_RESET_COUNT <= stuck_joining_count)
+  {
+     sl_zigbee_app_debug_println("Stuck joining: reboot");
+     CHIP_Reset();
+  }
+  else if(STUCK_JOINING_LEAVE_COUNT == stuck_joining_count)
+  {
+     sl_status_t status = sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_NO_OPTION);
+     sl_zigbee_app_debug_println("Stuck joining: leave 0x%X", status);
+  }
 }
 
 // Delay before the next join attempt, from the number of failed attempts in a
