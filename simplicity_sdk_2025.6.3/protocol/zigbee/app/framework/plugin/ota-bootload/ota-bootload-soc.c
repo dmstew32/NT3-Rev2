@@ -25,12 +25,20 @@
 //------------------------------------------------------------------------------
 // Globals
 
+#ifdef ADAPTIV_LIGHT
+#include "factory_reset.h"
+#endif // ADAPTIV_LIGHT
 //------------------------------------------------------------------------------
 sl_status_t bootloaderInstallNewImage(void)
 {
 #ifndef SL_ZIGBEE_TEST
   int32_t storageSlot = DEFAULT_SLOT;
   if (bootloader_setImagesToBootload(&storageSlot, 1) == BOOTLOADER_OK) {
+#ifdef ADAPTIV_LIGHT
+    // Full watchdog period for the bootloader's install, in case the
+    // watchdog keeps running across the reset
+    feed_the_dog_before_bootload();
+#endif // ADAPTIV_LIGHT
     // should not return
     bootloader_rebootAndInstall();
   }

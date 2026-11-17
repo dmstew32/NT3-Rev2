@@ -1,4 +1,4 @@
-set VERSION=4.1.4
+set VERSION=3.1.4
 set S37_DIR="..\GNU ARM v12.2.1 - Default\"
 set BOOTLOADER_DIR=..\bootloader\
 set BOOTLOADER=bootloader-storage-internal-single-1MB.s37

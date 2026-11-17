@@ -299,7 +299,8 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd)
               // Added color support for Daintree, so don't flash lights
               if(eADAPTIV_NWK == get_present_network())
               {
-                 dim_lights_up_down(1, DSECS_HALF_SECS);
+                 // Flash, then max trim level and a fresh occupancy timer
+                 dim_lights_up_down_end_at_max(1, DSECS_HALF_SECS);
               }
               return_status = true;
            }

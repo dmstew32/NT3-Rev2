@@ -465,9 +465,10 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
             // Already off and off button pressed, off from occ sensor
            break;
         }
-        if(false == _off_cmd)
+        if((false == _off_cmd) && !occ_dimmed_to_mid())
         {
-           // 1st off command?
+           // 1st off command?  (Not at mid from an occupancy dim: the on level
+           // already holds the wake level, an on must go back there.)
             save_present_light_level_to_on_level_attribute();
         }
         _off_cmd = true;
@@ -491,7 +492,7 @@ uint32_t sl_zigbee_af_on_off_cluster_server_command_parse(sl_service_opcode_t op
 #ifdef ADAPTIV_LIGHT
         _off_cmd = read_on_off_attribute(ZCL_ON_OFF_ATTRIBUTE_ID) ? true : false;
         _on_cmd = !_off_cmd;
-        if(_off_cmd)
+        if(_off_cmd && !occ_dimmed_to_mid())
         {
             save_present_light_level_to_on_level_attribute();
         }

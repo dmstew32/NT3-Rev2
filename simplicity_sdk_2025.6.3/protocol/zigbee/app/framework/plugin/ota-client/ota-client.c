@@ -545,7 +545,15 @@ void sl_zigbee_af_ota_client_stack_status_cb(sl_status_t status)
   }
   else
   {
-      randomDelaySeconds = get_random_number(10UL*60UL, 5UL*60UL);  // 5 - 10 minutes JGR
+      // First server search: random over the whole discovery period, so lights
+      // powered up together (e.g. global auto commissioning) don't all search
+      // at once.  Later searches repeat every discovery period from this one,
+      // so they stay spread out.
+#if ((SL_ZIGBEE_AF_OTA_SERVER_DISCOVERY_DELAY_MS / 1000UL) > 0xFFFFUL)
+#error "OTA server discovery delay too long for randomDelaySeconds (uint16_t)"
+#endif
+      randomDelaySeconds = (uint16_t)get_random_number(SL_ZIGBEE_AF_OTA_SERVER_DISCOVERY_DELAY_MS / 1000UL,
+                                                       15UL*60UL);  // 15 min - discovery period
   }
 #endif // ADAPTIV_LIGHT
   // EMAPPFWKV2-1516: make sure we don't have a delay time of 0 seconds.

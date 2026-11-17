@@ -376,6 +376,18 @@ void pet_the_dog(void)
   }
 }
 
+// Called right before the reset into the bootloader (OTA install), so the
+// bootloader gets a full watchdog period.  Waits for the feed to reach the
+// watchdog's low frequency clock domain, so the reset can't overtake it.
+void feed_the_dog_before_bootload(void)
+{
+  if(sl_hal_wdog_is_enabled(WDOG0))
+  {
+     sl_hal_wdog_feed(WDOG0);
+     sl_hal_wdog_wait_sync(WDOG0);
+  }
+}
+
 // These are for the cycling of power 5 times
 uint8_t inc_on_off_counter(void)
 {

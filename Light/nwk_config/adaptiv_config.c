@@ -3,6 +3,7 @@
 // provides the TOKEN_APP_* ids and types from sl_custom_token_header.h.
 #include "sl_token_api.h"
 
+#include "adaptiv_zcl.h"
 #include "af-main.h"
 #include "RehTOS.h"
 #include "hal_occ_sensor.h"
@@ -377,24 +378,20 @@ bool adaptiv_configuration_incoming_cmd(sl_zigbee_af_cluster_command_t* cmd)
      return(cmd_handled);
   }
   // Adaptiv reset commands
-  else if((0x00 == cmd->commandId) && (3 <= n_payload_bytes))
+  else if((ZCL_MFG_ADAPTIV_CONFIG_RESET_CMD_ID == cmd->commandId) && (3 <= n_payload_bytes))
   {
      // Reset cmd
      assert(1 == cmd->buffer[base_idx]);  // 1 = factory reset, else just reset
+     bool grouped = device_is_in_a_group();
      uint32_t delay = (uint32_t)GET_16_FROM_ARRAY(cmd->buffer, (base_idx + 1)) * 1000UL;
-     force_factory_reset(delay, eRESET_NORMAL);
-     return(true);
-  }
-  else if((0x01 == cmd->commandId) && (3 <= n_payload_bytes))
-  {
-     // Reset cmd if joined but not in group
-     if(!device_is_in_a_group())
+     uint8_t options = (n_payload_bytes >= 4) ? cmd->buffer[base_idx+3] : 0;
+     bool leave = (options & FACT_RESET_OPTION_NOT_GROUPED) ? (grouped == false) : true;
+
+     if(leave == true)
      {
-        assert(1 == cmd->buffer[base_idx]);  // 1 = factory reset, else just reset
-        uint32_t delay = (uint32_t)GET_16_FROM_ARRAY(cmd->buffer, (base_idx + 1)) * 1000UL;
         force_factory_reset(delay, eRESET_NORMAL);
      }
-     return(true);
+     return(leave);
   }
   else
   {

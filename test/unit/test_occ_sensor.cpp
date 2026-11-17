@@ -335,6 +335,21 @@ TEST_F(OccSensor, VacancyDimsToMidThenTurnsOffWithLevelChangeBytes)
     EXPECT_EQ(3u, m_air.size());                       // off: nothing more
 }
 
+// The on/off plugin's off command skips saving the present level while this is
+// true, so an on after (occupancy mid -> off) restores the wake level, not mid.
+TEST_F(OccSensor, OnlyAnOccupancyDimToMidKeepsTheOnLevelThroughAnOffCommand)
+{
+    EXPECT_FALSE(occ_dimmed_to_mid());                 // on
+    samples(600 * 1000 + 150);                         // vacancy: dimmed to mid
+    EXPECT_TRUE(occ_dimmed_to_mid());
+    EXPECT_EQ(204, m_on_level);                        // held at the wake level
+    get_present_network_fake.return_val = eSTAND_ALONE;
+    EXPECT_FALSE(occ_dimmed_to_mid());                 // Adaptiv group only
+    get_present_network_fake.return_val = eADAPTIV_NWK;
+    rx_off();                                          // the group turned off
+    EXPECT_FALSE(occ_dimmed_to_mid());
+}
+
 TEST_F(OccSensor, EmModeStaysAtMidInsteadOfOff)
 {
     m_flags = B_EM_MODE;

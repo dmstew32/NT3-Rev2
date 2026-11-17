@@ -14,6 +14,7 @@ bool factory_reset_in_progress(void);
 
 void hal_watchdog_init(bool force_reset);
 void pet_the_dog(void);
+void feed_the_dog_before_bootload(void);
 
 void inc_reset_counter(void);
 void write_firmware_version(void);

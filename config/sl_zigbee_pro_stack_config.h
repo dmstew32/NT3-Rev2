@@ -93,7 +93,7 @@
 // <o SL_ZIGBEE_BROADCAST_TABLE_SIZE> Broadcast Table Size <15-254>
 // <i> Default: 15
 // <i> The size of the broadcast table.
-#define SL_ZIGBEE_BROADCAST_TABLE_SIZE   15
+#define SL_ZIGBEE_BROADCAST_TABLE_SIZE   35
 
 // <o SL_ZIGBEE_NEIGHBOR_TABLE_SIZE> Neighbor Table Size
 // <i> Neighbor Table Size
@@ -101,7 +101,7 @@
 // <26=> 26
 // <i> Default: 16
 // <i> The size of the neighbor table.
-#define SL_ZIGBEE_NEIGHBOR_TABLE_SIZE   16
+#define SL_ZIGBEE_NEIGHBOR_TABLE_SIZE   26
 
 // <o SL_ZIGBEE_TRANSIENT_KEY_TIMEOUT_S> Transient key timeout (in seconds) <0-65535>
 // <i> Default: 300

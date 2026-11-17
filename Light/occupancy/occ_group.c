@@ -299,6 +299,14 @@ void occ_group_rx_keepalive(occ_group_t *g, uint32_t now_ms, uint16_t time_s,
      // Sync to the sender, our own keepalive is not needed
      cancel(g);
      start_timer(g, now_ms, received_ms);
+     // A time inside the window is this period's refresh.  +1 s: the time was sent
+     // rounded up, so with a fractional window (e.g. 30 s timeout: 7.5 s) it can land
+     // just outside it; without this every light re-arms its refresh and the group
+     // keeps resetting itself to that time.
+     if(received_ms <= refresh_window_ms(g) + 1000UL)
+     {
+        g->refresh_checked = true;
+     }
   }
 }
 
